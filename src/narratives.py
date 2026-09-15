@@ -427,7 +427,7 @@ WORD_CEILING = 60
 def profile_writeups(team_writeups: list[dict]) -> dict:
     """Measure a generated column against the reference-corpus profile.
 
-    The reference columns in reference/comedy_examples.md average ~29 words with
+    The reference columns in reference/my_columns.md average ~29 words with
     nothing over 66. This reports whether a generation actually landed there, so
     drift is visible immediately instead of being discovered weeks later.
     """

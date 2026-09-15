@@ -7,11 +7,11 @@ sound like *you* rather than like a generic AI roast.
 
 | file | tracked by git? | what it's for |
 |---|---|---|
-| `comedy_examples.example.md` | yes | Template. Copy it, don't edit it. |
-| `comedy_examples.md` | **no — gitignored** | Your real columns. Contains real names, stays local. |
+| `TEMPLATE.md` | yes | Template. Copy it, don't edit it. |
+| `my_columns.md` | **no — gitignored** | Your real columns. Contains real names, stays local. |
 
 ```bash
-cp reference/comedy_examples.example.md reference/comedy_examples.md
+cp reference/TEMPLATE.md reference/my_columns.md
 # paste your columns in, then ask Claude to recalibrate src/prompts.py
 ```
 

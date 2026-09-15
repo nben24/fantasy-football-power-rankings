@@ -5,7 +5,7 @@ Keep them in whatever format you actually wrote them in; don't clean them up or 
 The formatting itself (how you write headers, how you group tiers, where you put the stats) is
 part of what gets calibrated.
 
-Copy this file to `reference/comedy_examples.md` before editing — that filename is gitignored, so
+Copy this file to `reference/my_columns.md` before editing — that filename is gitignored, so
 your real league and manager names never get committed.
 
 See `reference/README.md` for what makes good calibration material.

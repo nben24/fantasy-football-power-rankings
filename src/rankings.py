@@ -4,15 +4,18 @@ Baseline formula (weights redistributed when a component is unavailable):
   season performance  25%   win/loss record
   points scored       20%   points-per-game
   recent form         20%   last up-to-3 weeks, win rate + margin
-  roster strength     15%   NOT scored in MVP -- screenshots give player
-                             names, not projections, and the spec forbids
-                             inventing a number we don't actually have.
-                             Its weight is redistributed across the rest.
+  roster strength     15%   NOT scored -- screenshots expose team-level
+                             projections, not per-player points, so there is no
+                             honest number to compute this from. Its weight is
+                             redistributed across the rest.
   consistency         10%   inverse of stdev of weekly scores
   schedule context     10%   average opponent win% faced
 
-Every output team dict carries `key_factors`: short, fact-based strings an
-LLM (or a human) can quote directly without having to invent anything.
+The resulting power score orders the column and nothing else -- it is never
+shown to readers and the writer is forbidden from naming it. Each team also
+carries `key_factors`, which the narrative layer treats as thin background
+rather than primary material; see src/occurrences.py for what the writer
+actually builds on.
 """
 
 import re
@@ -141,7 +144,7 @@ def compute_power_rankings(league: dict, week: int) -> list[dict]:
     have_schedule = any(v is not None for v in schedule_raw.values())
     schedule_n = _min_max_normalize({k: v for k, v in schedule_raw.items() if v is not None}) if have_schedule else {}
 
-    # Roster strength is never scored in the MVP -- redistribute its weight.
+    # Roster strength is never scored -- redistribute its weight.
     active_components = ["season", "points", "recent_form"]
     if have_consistency:
         active_components.append("consistency")

@@ -5,7 +5,7 @@ dials. The pipeline is handed concrete occurrences (see src/occurrences.py) and
 writes to whatever actually happened. A team that did nothing gets one dismissive
 line -- that silence is the point, not a gap to fill.
 
-Calibrated against ~250 real writeups in reference/comedy_examples.md: mean 28
+Calibrated against ~250 real writeups in reference/my_columns.md: mean 28
 words, zero mentions of power score or strength of schedule, ~1 number per entry.
 
 Deliberately avoids quotable example lines. Earlier versions supplied them and the
