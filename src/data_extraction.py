@@ -32,9 +32,25 @@ EXTRACT_TOOL = {
                         "name": {"type": "string", "description": "Team name exactly as shown."},
                         "manager": {"type": ["string", "null"], "description": "Owner/manager name if shown."},
                         "record": {"type": ["string", "null"], "description": "e.g. '3-1' or '3-1-0'."},
-                        "points_for": {"type": ["number", "null"]},
-                        "points_against": {"type": ["number", "null"]},
+                        "points_for": {"type": ["number", "null"], "description": "Season-total PF column, not a single week's score."},
+                        "points_against": {"type": ["number", "null"], "description": "Season-total PA column."},
                         "standing": {"type": ["integer", "null"], "description": "Standings rank position if shown."},
+                        "streak": {
+                            "type": ["string", "null"],
+                            "description": (
+                                "Current win/loss streak exactly as shown, e.g. 'W5', 'L3', 'W1'. "
+                                "Visible in the STRK standings column and in parentheses next to the "
+                                "record on the scoreboard."
+                            ),
+                        },
+                        "playoff_pct": {
+                            "type": ["number", "null"],
+                            "description": "The PLAYOFF % standings column as a number (e.g. 98, 4). Omit if not shown.",
+                        },
+                        "division": {
+                            "type": ["string", "null"],
+                            "description": "Division heading this team is listed under, e.g. 'EAST'. Omit if standings aren't split by division.",
+                        },
                     },
                     "required": ["name"],
                 },
@@ -47,8 +63,20 @@ EXTRACT_TOOL = {
                     "properties": {
                         "team_a": {"type": "string"},
                         "team_b": {"type": "string"},
-                        "score_a": {"type": ["number", "null"]},
-                        "score_b": {"type": ["number", "null"]},
+                        "score_a": {"type": ["number", "null"], "description": "The large actual score."},
+                        "score_b": {"type": ["number", "null"], "description": "The large actual score."},
+                        "projected_a": {
+                            "type": ["number", "null"],
+                            "description": (
+                                "The smaller projected-points number shown directly beneath team_a's "
+                                "actual score. Do NOT confuse it with the actual score -- the actual "
+                                "score is the large bold number, the projection is the small one below it."
+                            ),
+                        },
+                        "projected_b": {
+                            "type": ["number", "null"],
+                            "description": "The smaller projected-points number shown beneath team_b's actual score.",
+                        },
                     },
                     "required": ["team_a", "team_b"],
                 },
@@ -94,6 +122,18 @@ Rules:
 - Use the team name exactly as displayed, don't paraphrase or abbreviate it.
 - If a digit is blurry, cropped, or ambiguous, still make your best-effort extraction AND add a note to uncertain_notes describing the ambiguity precisely.
 - Do not fabricate matchups or teams that are not shown.
+
+Field-specific guidance for ESPN screenshots:
+- SCOREBOARD cards show, per team: name, manager, record, streak in parentheses like (W5)/(L3),
+  a large bold ACTUAL score, and a smaller PROJECTED score directly beneath it. Record the large
+  number as the score and the small one as the projection -- never swap them.
+- STANDINGS tables have columns that may be split across two screenshots (one showing
+  RECORD/WIN%/GB/PF, another showing PF/PA/STRK/PLAYOFF %). Merge both views of the same team
+  into one entry rather than creating duplicates.
+- PF and PA in standings are SEASON TOTALS, not this week's points. Never put a weekly score in
+  points_for.
+- Standings may be grouped under division headings (EAST/WEST). Record which heading each team
+  appeared under.
 """
 
 

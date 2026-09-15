@@ -1,0 +1,16 @@
+# Secrets
+.env
+
+# Environment / build
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+*.bak
+
+# Real league history — contains real manager names, and this repo is public.
+data/
+
+# Your own reference columns. The committed template is *.example.md;
+# the working copy stays local because it holds real names.
+reference/comedy_examples.md

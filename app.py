@@ -15,16 +15,6 @@ DEBUG = os.environ.get("FPR_DEBUG", "").lower() in ("1", "true", "yes")
 
 # ---------- helpers ----------
 
-def rank_arrow(rank_change) -> str:
-    if rank_change is None:
-        return "🆕"
-    if rank_change > 0:
-        return f"↑{rank_change}"
-    if rank_change < 0:
-        return f"↓{abs(rank_change)}"
-    return "—"
-
-
 def _ordered_teams_with_tiers(week_data: dict) -> list[tuple]:
     """Returns [(tier_name_or_None, tier_subtitle_or_None, [ranking_dict, ...]), ...].
     Falls back to a single untiered group (flat rank order) if no tiers were generated
@@ -51,6 +41,36 @@ def _ordered_teams_with_tiers(week_data: dict) -> list[tuple]:
 DIVIDER = "⸻"
 
 
+def _clean_subtitle(subtitle) -> str:
+    """The writer sometimes wraps its own subtitle in parentheses; both the export
+    and the UI add their own, producing ((doubled parens))."""
+    s = (subtitle or "").strip()
+    while len(s) > 1 and s.startswith("(") and s.endswith(")"):
+        s = s[1:-1].strip()
+    return s
+
+_RANK_EMOJI = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+
+
+def _rank_emoji(rank: int) -> str:
+    if 1 <= rank <= 10:
+        return _RANK_EMOJI[rank - 1]
+    return "".join(_RANK_EMOJI[int(d) - 1] if d != "0" else "🔟" for d in str(rank))
+
+
+def _header_meta(r: dict, week_data: dict) -> str:
+    """Record • streak • PF/PA -- every stat the prose is forbidden from restating
+    lives here instead, the way the reference columns do it."""
+    team = next((t for t in week_data.get("teams", []) if t["name"] == r["name"]), {})
+    parts = [narratives.tidy_record(r.get("record"))]
+    if team.get("streak"):
+        parts.append(team["streak"])
+    pf, pa = team.get("points_for"), team.get("points_against")
+    if pf is not None and pa is not None:
+        parts.append(f"{pf:.0f} PF / {pa:.0f} PA")
+    return " • ".join(parts)
+
+
 def format_rankings_imessage(league_name: str, week: int, week_data: dict) -> str:
     """Plain-text export, no markdown syntax -- iMessage (and most group chat
     apps) don't render #, **, or --- as formatting, they just show the raw
@@ -69,13 +89,11 @@ def format_rankings_imessage(league_name: str, week: int, week_data: dict) -> st
     for tier_name, tier_subtitle, teams in _ordered_teams_with_tiers(week_data):
         if tier_name:
             lines.append(tier_name.upper())
-            if tier_subtitle:
-                lines.append(f"({tier_subtitle})")
+            if _clean_subtitle(tier_subtitle):
+                lines.append(f"({_clean_subtitle(tier_subtitle)})")
             lines.append("")
         for r in teams:
-            prev = f"#{r['previous_rank']}" if r["previous_rank"] is not None else "unranked"
-            lines.append(f"{r['rank']}. {r['name']} — {r.get('record') or 'record n/a'}")
-            lines.append(f"Previous: {prev} {rank_arrow(r['rank_change'])}  |  Power Score: {r['power_score']}")
+            lines.append(f"{_rank_emoji(r['rank'])} {r['name']} ({_header_meta(r, week_data)})")
             lines.append("")
             if r["name"] in writeups:
                 lines.append(writeups[r["name"]])
@@ -103,9 +121,9 @@ def format_rankings_imessage(league_name: str, week: int, week_data: dict) -> st
     return "\n".join(lines)
 
 
-def _regenerate_writeup_ui(league: dict, week: int, week_data: dict, team_name: str):
-    key_base = f"regen_{league['id']}_{week}_{team_name}"
-    with st.expander(f"🔄 Regenerate {team_name}'s writeup"):
+def _regenerate_writeup_ui(league: dict, week: int, week_data: dict, team_name: str, context: str):
+    key_base = f"regen_{context}_{league['id']}_{week}_{team_name}"
+    with st.expander(f"🔄 Regenerate {team_name}'s writeup", key=f"{key_base}_expander"):
         feedback = st.text_input(
             "What should change? (optional -- leave blank to just try again)",
             key=f"{key_base}_feedback",
@@ -137,7 +155,7 @@ def _regenerate_writeup_ui(league: dict, week: int, week_data: dict, team_name: 
                         st.exception(e)
 
 
-def render_week(league: dict, week: int, week_data: dict):
+def render_week(league: dict, week: int, week_data: dict, context: str):
     theme = week_data.get("writeups", {}).get("week_theme")
     if theme:
         st.markdown(f"#### _{theme}_")
@@ -151,8 +169,8 @@ def render_week(league: dict, week: int, week_data: dict):
     for tier_name, tier_subtitle, teams in _ordered_teams_with_tiers(week_data):
         if tier_name:
             st.markdown(f"## {tier_name}")
-            if tier_subtitle:
-                st.caption(tier_subtitle)
+            if _clean_subtitle(tier_subtitle):
+                st.caption(_clean_subtitle(tier_subtitle))
         for r in teams:
             prev = f"#{r['previous_rank']}" if r["previous_rank"] is not None else "unranked"
             st.markdown(f"### {r['rank']}. {r['name']} — {r.get('record') or 'record n/a'}")
@@ -163,7 +181,7 @@ def render_week(league: dict, week: int, week_data: dict):
             if r["name"] in writeups:
                 st.write(writeups[r["name"]])
             if week_data.get("writeups", {}).get("team_writeups"):
-                _regenerate_writeup_ui(league, week, week_data, r["name"])
+                _regenerate_writeup_ui(league, week, week_data, r["name"], context)
             st.divider()
 
     awards = week_data.get("writeups", {}).get("awards", [])
@@ -181,7 +199,12 @@ def render_week(league: dict, week: int, week_data: dict):
     full_text = format_rankings_imessage(league["name"], week, week_data)
     st.markdown("### Export (formatted for iMessage / group chat)")
     st.code(full_text, language=None)
-    st.download_button("⬇️ Download TXT", full_text, file_name=f"week_{week}_rankings.txt")
+    st.download_button(
+        "⬇️ Download TXT",
+        full_text,
+        file_name=f"week_{week}_rankings.txt",
+        key=f"download_{context}_{league['id']}_{week}",
+    )
 
 
 def reset_flow_state():
@@ -311,6 +334,9 @@ with tab_week:
                 memory.save_league(league)  # persist any new team-name aliases learned
                 st.session_state["extracted"] = extracted
                 st.session_state["warnings"] = data_validation.validate_extracted_data(extracted)
+                st.session_state["reconciliation"] = data_validation.reconcile_week(
+                    league, int(week_num), extracted
+                )
                 st.session_state["flow_stage"] = "extracted"
             except Exception as e:
                 st.error(f"Couldn't extract data from those screenshots: {e}")
@@ -329,18 +355,31 @@ with tab_week:
                 for w in warnings:
                     st.warning(w)
 
-        st.markdown("#### Review & correct extracted data")
-        st.caption("Edit any cell that looks wrong before generating rankings.")
+        recon = st.session_state.get("reconciliation") or []
+        ok, failed, skipped = data_validation.reconciliation_summary(recon)
+        if failed:
+            st.error(f"🔴 {failed} number(s) don't add up — fix these before generating:")
+            for r in recon:
+                if r["status"] == "fail":
+                    st.warning(f"**{r['team']}** — {r['check']}: {r['detail']}")
+        elif ok:
+            st.success(f"🟢 All {ok} cross-checks passed — scores, records and streaks agree with last week.")
+        elif skipped:
+            st.info("First stored week for this league — nothing to cross-check against yet.")
 
-        teams_df = pd.DataFrame(extracted.get("teams", [])).reindex(
-            columns=["name", "manager", "record", "points_for", "points_against", "standing"]
-        )
-        edited_teams = st.data_editor(teams_df, num_rows="dynamic", key="teams_editor", use_container_width=True)
+        with st.expander("Review & correct extracted data", expanded=bool(failed)):
+            st.caption("Edit any cell that looks wrong before generating rankings.")
 
-        matchups_df = pd.DataFrame(extracted.get("matchups", [])).reindex(
-            columns=["team_a", "score_a", "team_b", "score_b"]
-        )
-        edited_matchups = st.data_editor(matchups_df, num_rows="dynamic", key="matchups_editor", use_container_width=True)
+            teams_df = pd.DataFrame(extracted.get("teams", [])).reindex(
+                columns=["name", "manager", "record", "streak", "points_for", "points_against",
+                         "playoff_pct", "division", "standing"]
+            )
+            edited_teams = st.data_editor(teams_df, num_rows="dynamic", key="teams_editor", use_container_width=True)
+
+            matchups_df = pd.DataFrame(extracted.get("matchups", [])).reindex(
+                columns=["team_a", "score_a", "projected_a", "team_b", "score_b", "projected_b"]
+            )
+            edited_matchups = st.data_editor(matchups_df, num_rows="dynamic", key="matchups_editor", use_container_width=True)
 
         if st.button("🔥 GENERATE POWER RANKINGS", type="primary"):
             with st.spinner("Crunching numbers and writing rankings..."):
@@ -383,6 +422,9 @@ with tab_week:
                     repeated = narratives.find_repeated_imagery(final.get("team_writeups", []))
                     if repeated:
                         st.session_state["repeated_imagery_warning"] = repeated
+                    st.session_state["column_profile"] = narratives.profile_writeups(
+                        final.get("team_writeups", [])
+                    )
 
                     st.session_state["flow_stage"] = "done"
                     st.session_state["done_week"] = int(week_num)
@@ -396,6 +438,18 @@ with tab_week:
         w = st.session_state["done_week"]
         league = memory.load_league(active_league_id)  # reload fresh copy
         st.success(f"Week {w} power rankings generated.")
+
+        profile = st.session_state.get("column_profile") or {}
+        if profile.get("n"):
+            st.caption(
+                f"Column profile: {profile['n']} writeups · mean {profile['mean_words']} words "
+                f"(reference corpus ≈29) · shortest {profile['shortest']} · longest {profile['longest']}"
+            )
+            if profile.get("violations"):
+                with st.expander(f"⚠️ {len(profile['violations'])} style rule violation(s)"):
+                    for v in profile["violations"]:
+                        st.warning(v)
+
         repeated = st.session_state.pop("repeated_imagery_warning", None)
         if repeated:
             with st.expander(f"⚠️ {len(repeated)} possible repeated word(s) across writeups — worth a look", expanded=True):
@@ -406,7 +460,7 @@ with tab_week:
                 )
                 for team_a, team_b, words in repeated:
                     st.warning(f"**{team_a}** and **{team_b}** both use: {', '.join(words)}")
-        render_week(league, w, memory.get_week(league, w))
+        render_week(league, w, memory.get_week(league, w), context="upload")
 
 with tab_history:
     weeks = memory.sorted_week_numbers(league)
@@ -414,4 +468,4 @@ with tab_history:
         st.write("No history yet — generate this week's rankings first.")
     else:
         chosen_week = st.selectbox("Week", weeks[::-1], key="history_week_select")
-        render_week(league, chosen_week, memory.get_week(league, chosen_week))
+        render_week(league, chosen_week, memory.get_week(league, chosen_week), context="history")

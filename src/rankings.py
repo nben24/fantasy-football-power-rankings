@@ -157,7 +157,9 @@ def compute_power_rankings(league: dict, week: int) -> list[dict]:
         for r in (prev_week_data or {}).get("rankings", []):
             prev_rankings[r["name"]] = r["rank"]
 
-    weeks_of_history = len(sorted(int(k) for k in league.get("weeks", {}).keys() if int(k) <= week))
+    stored_weeks = sorted(int(k) for k in league.get("weeks", {}).keys() if int(k) <= week)
+    weeks_of_history = len(stored_weeks)
+    tracking_from_week_one = bool(stored_weeks) and min(stored_weeks) <= 1
 
     results = []
     for t in teams:
@@ -188,7 +190,10 @@ def compute_power_rankings(league: dict, week: int) -> list[dict]:
             key_factors.append(f"opponents avg {schedule_raw[name] * 100:.0f}% win rate")
         if have_consistency and consistency_raw.get(name) is not None:
             scores = [g["score"] for g in histories[name]]
-            key_factors.append(f"scored {min(scores):.1f}-{max(scores):.1f} this season")
+            # "this season" is only true when week 1 was actually uploaded; otherwise
+            # this range covers just the weeks the app has seen.
+            span = "this season" if tracking_from_week_one else f"over {len(scores)} tracked weeks"
+            key_factors.append(f"scored {min(scores):.1f}-{max(scores):.1f} {span}")
 
         confidence = "low" if weeks_of_history <= 1 else ("medium" if weeks_of_history == 2 else "high")
 

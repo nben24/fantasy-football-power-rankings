@@ -13,7 +13,7 @@ No auth, no cloud, no database server. Just Streamlit + JSON files on your machi
 ## Setup (one-time)
 
 ```bash
-cd fantasy_football_powr_rankings_august_2026
+cd fantasy-football-power-rankings
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -40,9 +40,11 @@ Weekly workflow, per league:
 3. Set the **Week** number (it defaults to "last week + 1").
 4. Optionally type 1–3 sentences of **context** — trades, shit talk, injuries, whatever
    happened. This gets stored as narrative history for future callbacks.
-5. Click **🔍 Extract Data From Screenshots**. Claude reads the images and fills in a table.
-6. **Review the extracted table** — fix anything wrong (OCR mistakes, missing scores). Any
-   flagged issues show up as warnings above the table.
+5. Click **🔍 Extract Data From Screenshots**. Claude reads the images and pulls out team names,
+   records, streaks, PF/PA, playoff odds, divisions, scores and ESPN's projected scores.
+6. **Check the reconciliation banner.** Green means every number was verified against last week
+   (see below) and you can move straight on. Red names the specific cell that doesn't add up.
+   The full editable table is still there, collapsed, if you want it.
 7. Click **🔥 GENERATE POWER RANKINGS**. This computes the power scores, finds the best
    comedic angle for each team, writes the commentary around those angles, then runs a
    second editorial pass to cut generic filler and tighten jokes (four API calls total: one
@@ -58,6 +60,32 @@ Repeat for each of your leagues — the app remembers each league's full history
 Use the **History** tab to pull up any previous week's rankings, and the sidebar's
 **League Notes** / **Log an Event** panels to keep persistent context (rivalries, running
 jokes, trades) that future weeks' commentary can draw on.
+
+## How it avoids getting facts wrong
+
+A savage, specific writeup built on a misread score is the worst possible output, so extracted
+numbers get **proven rather than eyeballed**. The two screenshot types overlap, and that
+redundancy allows arithmetic verification:
+
+- season PF must rise by exactly this week's score, and PA by the opponent's
+- the record must advance by one game, on the correct side
+- the streak must follow from this week's result (was `W4`, won → must read `W5`)
+
+These are week-over-week deltas, so they work even when you start uploading mid-season and the
+app has never seen weeks 1–8. Everything reconciling gets you one green line; anything that
+doesn't names the exact team and field. Week 1 of a season has nothing to compare against, so
+that one upload is worth a manual look.
+
+## What the writeups are built from
+
+`src/occurrences.py` detects things that actually *happened* — blowouts, nail-biters, streaks,
+scoring the most points in the league and still losing, big misses against ESPN's projection,
+rank swings, playoff-odds collapses — and hands those to the writer instead of season averages.
+
+A team that did nothing gets an explicit *nothing notable* marker, and that silence is the point:
+it's what produces a one-line dismissal instead of a paragraph manufactured out of rate stats.
+Length follows material, which is why a real column comes out uneven the way a human-written one
+is.
 
 ## How the ranking works
 
@@ -116,11 +144,13 @@ hit. See `src/prompts.py` for the full philosophy.
 
 ### Feeding it your real style (`reference/`)
 
-`reference/2025_power_rankings.md` and `reference/comedy_examples.md` are a workspace for
-calibrating the voice against your actual past columns — paste in real examples, then ask Claude
-to analyze them and update `src/prompts.py` accordingly. These files aren't read by the running
-app; the calibration is a one-time pass that bakes distilled lessons into the prompt, not a
-runtime lookup, and old wording should never get reused verbatim.
+Copy `reference/comedy_examples.example.md` to `reference/comedy_examples.md`, paste in your own
+past columns, then ask Claude to analyze them and update `src/prompts.py` accordingly. The working
+copy is gitignored, so real manager names stay on your machine.
+
+This is a one-time calibration pass, not a runtime lookup — the app never reads the file while
+generating, and old wording should never be reused verbatim. See `reference/README.md` for what
+makes good calibration material.
 
 ## Project layout
 
@@ -129,13 +159,14 @@ app.py                  Streamlit UI — the whole weekly workflow
 src/
   memory.py              JSON persistence: leagues, weeks, events, storylines, team-name normalization
   data_extraction.py     Screenshot -> structured data (Claude vision, forced tool call)
-  data_validation.py     Duplicate/missing-data checks, name normalization
+  data_validation.py     Name normalization, shape checks, and week-over-week reconciliation
+  occurrences.py         Deterministic detection of what actually happened this week
   rankings.py            The power-ranking formula
   narratives.py          Angle-finding -> writeup generation -> editorial critique pipeline
   prompts.py             Shared tone/style/critical-rules text, comedy taxonomy
-data/leagues/*.json      One file per league — your entire league history lives here
-reference/               Workspace for calibrating style against your real past rankings
-tests/                   Mock-data tests for the ranking math, validation, and storyline logic
+data/leagues/*.json      One file per league — your entire league history lives here (gitignored)
+reference/               Your past columns, for a one-time voice calibration pass (see its README)
+tests/                   Mock-data tests for ranking math, validation, occurrences, storylines
 ```
 
 ## Running the tests

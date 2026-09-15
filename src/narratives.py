@@ -16,7 +16,7 @@ import os
 import re
 import anthropic
 
-from src import memory, prompts
+from src import memory, occurrences, prompts
 
 MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-5")
 
@@ -94,10 +94,12 @@ WRITEUP_TOOL = {
             "tiers": {
                 "type": "array",
                 "description": (
-                    "Group all teams into tiers that fit THIS week's actual story -- invent fresh "
-                    "tier names/count each time, don't reuse a fixed template. A dominant outlier "
-                    "can be its own one-team tier. Tiers together must cover every team, ordered "
-                    "best to worst, as CONTIGUOUS bands of the rank order."
+                    "Group all teams into a recognizable four-part skeleton -- the good teams, the "
+                    "frauds, the mid, the embarrassments -- named in this column's voice. Tier NAMES "
+                    "stay stable week to week (a fraud-watch tier is a permanent fixture); the "
+                    "SUBTITLE carries the joke and changes every week. A one-team tier is warranted "
+                    "only when a team has genuinely separated from the league. Tiers together must "
+                    "cover every team, best to worst, as CONTIGUOUS bands of the rank order."
                 ),
                 "items": {
                     "type": "object",
@@ -123,9 +125,11 @@ WRITEUP_TOOL = {
                         "narrative": {
                             "type": "string",
                             "description": (
-                                "The writeup, built around that team's selected comedic angle. Length "
-                                "varies with the material -- a single sharp sentence is fine, so is 4 "
-                                "sentences when there's a real bit. Don't make every writeup the same length."
+                                "The writeup. Length is set by the material, not by style: a team whose "
+                                "WHAT HAPPENED line was empty gets 10-25 words; one occurrence gets 20-35; "
+                                "two or more gets 35-50. Hard ceiling 60 words. Never restate the record, "
+                                "rank or streak (they're printed in the header) and never name the power "
+                                "score or strength of schedule."
                             ),
                         },
                     },
@@ -168,6 +172,16 @@ SINGLE_WRITEUP_TOOL = {
 }
 
 
+def tidy_record(record) -> str:
+    """'7-2-0' -> '7-2'. Ties are kept when they actually happened."""
+    if not record:
+        return "record n/a"
+    parts = [p.strip() for p in str(record).split("-")]
+    if len(parts) == 3 and parts[2] in ("0", ""):
+        return f"{parts[0]}-{parts[1]}"
+    return str(record)
+
+
 def build_facts_bundle(league: dict, week: int, rankings: list[dict], context_text: str) -> str:
     """Objective facts + targeted history (trajectory + relevant storylines).
     Deliberately does NOT dump full past-week writeup prose -- storylines are
@@ -184,24 +198,43 @@ def build_facts_bundle(league: dict, week: int, rankings: list[dict], context_te
         lines.append(context_text)
         lines.append("")
 
-    lines.append("THIS WEEK'S POWER RANKINGS (objective, computed from real data):")
+    week_data = memory.get_week(league, week) or {}
+    detected = occurrences.detect(league, week, rankings)
+    teams_by_name = {t["name"]: t for t in week_data.get("teams", [])}
+
+    lines.append(
+        "THIS WEEK'S RANKING. The rank, record and streak in each header are ALREADY PRINTED "
+        "above each writeup in the final column -- do not restate them in prose. The power score "
+        "is an internal sorting number: never name it, never cite it, never reference a team's "
+        "rank number inside a writeup."
+    )
     for r in rankings:
-        move = ""
-        if r["previous_rank"] is None:
-            move = "(new to rankings)"
-        elif r["rank_change"] == 0:
-            move = "(unchanged from #%d)" % r["previous_rank"]
-        else:
-            direction = "up" if r["rank_change"] > 0 else "down"
-            move = f"({direction} {abs(r['rank_change'])} from #{r['previous_rank']})"
-        lines.append(
-            f"#{r['rank']} {r['name']} -- {r.get('record')} -- power score {r['power_score']} {move}"
-        )
-        lines.append(f"   key facts: {'; '.join(r['key_factors'])}")
-        lines.append(f"   record_vs_power signal: {r.get('record_vs_power', 'aligned')}")
+        t = teams_by_name.get(r["name"], {})
+        streak = f", {t['streak']}" if t.get("streak") else ""
+        lines.append(f"#{r['rank']} {r['name']} ({tidy_record(r.get('record'))}{streak})")
+        lines.append(f"   WHAT HAPPENED: {occurrences.format_for_prompt(detected, r['name'])}")
+        # Background is deliberately thin -- it exists for the rare week where a
+        # rate stat IS the joke, not as default material. Strength-of-schedule and
+        # the rank-vs-rank sentences are stripped: the reference columns never use
+        # the first, and the second would smuggle rank numbers back into prose.
+        background = [
+            f for f in r["key_factors"]
+            if "opponents avg" not in f and "power score" not in f and "record ranks" not in f
+        ]
+        if background:
+            lines.append(f"   background (do not quote unless it IS the joke): {'; '.join(background)}")
+        if r.get("record_vs_power") in ("fraud_watch", "underrated"):
+            gap = abs(r.get("record_rank", r["rank"]) - r["rank"])
+            if gap >= 3:
+                lines.append(f"   record-vs-quality: {r['record_vs_power']} (gap of {gap} places)")
     lines.append("")
 
-    week_data = memory.get_week(league, week) or {}
+    if detected["league"]:
+        lines.append("LEAGUE-WIDE THIS WEEK:")
+        for o in detected["league"]:
+            lines.append(f"  {o['text']}")
+        lines.append("")
+
     if week_data.get("matchups"):
         lines.append("THIS WEEK'S MATCHUP RESULTS:")
         for m in week_data["matchups"]:
@@ -380,6 +413,49 @@ def find_repeated_imagery(team_writeups: list[dict], min_word_len: int = 7) -> l
             if shared:
                 warnings.append((names[i], names[j], sorted(shared)))
     return warnings
+
+
+_FORBIDDEN_IN_PROSE = (
+    (r"power score", "power score"),
+    (r"\bopponent[s]?\s+(?:avg|average)?\s*\d*%?\s*win rate", "opponent win rate"),
+    (r"strength of schedule", "strength of schedule"),
+)
+
+WORD_CEILING = 60
+
+
+def profile_writeups(team_writeups: list[dict]) -> dict:
+    """Measure a generated column against the reference-corpus profile.
+
+    The reference columns in reference/comedy_examples.md average ~29 words with
+    nothing over 66. This reports whether a generation actually landed there, so
+    drift is visible immediately instead of being discovered weeks later.
+    """
+    import statistics
+
+    counts = [len(w["narrative"].split()) for w in team_writeups]
+    if not counts:
+        return {"n": 0}
+
+    violations = []
+    for w in team_writeups:
+        n = len(w["narrative"].split())
+        if n > WORD_CEILING:
+            violations.append(f"{w['name']}: {n} words (ceiling {WORD_CEILING})")
+        for pattern, label in _FORBIDDEN_IN_PROSE:
+            if re.search(pattern, w["narrative"], re.I):
+                violations.append(f"{w['name']}: mentions {label}")
+        decimals = re.findall(r"\b\d+\.\d+\b", w["narrative"])
+        if len(decimals) > 1:
+            violations.append(f"{w['name']}: {len(decimals)} decimal numbers")
+
+    return {
+        "n": len(counts),
+        "mean_words": round(statistics.mean(counts), 1),
+        "shortest": min(counts),
+        "longest": max(counts),
+        "violations": violations,
+    }
 
 
 def apply_storyline_updates(league: dict, week: int, updates: list[dict]) -> None:
