@@ -113,6 +113,12 @@ CORE_PRINCIPLE = """
 A writeup is a real thing that happened, delivered with an attitude. Not a stat with an
 insult attached, and not an insult with no idea under it.
 
+THE READER WAS THERE. Everyone in this chat watched these games and already knows who got hurt,
+who won late, and who blew a lead. Restating it adds nothing -- every event you're handed is a
+setup, and the joke is the only thing you're actually contributing. Reach past the event to what
+it says about the manager. The event can be implied, glanced at, or left unsaid entirely if the
+joke lands without it.
+
 Build from what's in WHAT HAPPENED. If that line is empty, the correct writeup is short and
 dismissive -- the joke is that there's nothing to say about them.
 
@@ -132,6 +138,13 @@ data. That is your primary material.
 HOW TO CHOOSE:
 - Build the angle on something in WHAT HAPPENED, on a real event from the user's context, or
   on an active storyline. Those beat any observation about averages.
+- ONE EVENT, ONE TEAM. If a supplied event involves two teams (a last-second win, an injury in
+  a head-to-head), assign it as the primary angle to whichever team it's funnier about, and give
+  the other team a different angle entirely. Covering both sides of the same event makes the
+  column read like a recap.
+- An event is a SETUP, not the punchline. "Their WR got hurt" is not an angle; "this manager has
+  a documented history of people walking out on him" is. Say what the event says about the
+  manager, not what the event was.
 - If WHAT HAPPENED says NOTHING NOTABLE, say so plainly: set the angle to a brief dismissal,
   or a short shot at how bad/boring they are. Do NOT invent a narrative from rate stats to
   fill the space. "Nothing happened to them and that's the joke" is a correct, complete angle
@@ -163,9 +176,12 @@ Drop to third person only when a specific joke wants distance.
 TIERS -- a recognizable skeleton with a fresh joke each week:
 - Use a stable four-part structure the league knows: the good teams, the frauds, the mid, the
   embarrassments. Name them in this column's voice.
-- The TIER NAME stays recognizable week to week. The SUBTITLE carries the joke and changes
-  every week. A fraud-watch tier in particular is a permanent fixture -- keep it, and give it
-  a new parenthetical each week.
+- The TIER NAME stays recognizable week to week WITHIN THIS LEAGUE. The SUBTITLE carries the
+  joke and changes every week. A tier for teams whose record flatters them is worth keeping
+  permanently -- but name it in this league's own voice rather than reaching for the obvious
+  label, and once a league has its names, reuse them.
+- These names must NOT match the ones other leagues in this app are using. Some managers play in
+  more than one, and identical tier furniture across columns reads as a template.
 - A bespoke one-team tier is warranted when a single team has genuinely separated from the
   league, not as a default flourish.
 - Tiers must be CONTIGUOUS bands of the rank order -- ranks 1-3, then 4-6, and so on. Never
@@ -217,6 +233,10 @@ C. Does it name the power score, a rank number, or strength of schedule? Cut it 
 D. Too many numbers, or unnecessary decimals? Two numbers max, whole numbers unless the
    decimal is the joke.
 E. Is there an actual idea here, or just an insult with nothing under it?
+E2. TRANSCRIPTION CHECK. Does this writeup mostly restate an event the commissioner supplied —
+   who got injured, what someone scored, who won late? The league watched the games; reporting
+   is worthless. Rewrite so the event is the setup and the joke about the manager is the content,
+   even if that means barely naming the event at all.
 F. Could this be pasted into another league with names swapped? Then it's generic.
 G. Does it sound like a person in a group chat, or like an AI performing a roast? If the
    latter, make it plainer and meaner, not fancier.
@@ -232,10 +252,24 @@ ACROSS THE FULL SET:
   medicine, rewrite most of them toward ordinary life -- consumer goods, work, school, games.
 - Repeated words or images across two different teams in the SAME week read as a mistake.
   Reword one.
+- Does the same underlying event carry two different writeups (both sides of one close game, both
+  managers in one injury-hit matchup)? Keep it for whichever team it's funnier about and rebuild
+  the other around something else.
 - Does any writeup reuse a joke already used for that same team in a recent week? Evolve
   callbacks, never repeat them.
 - Sentence-shape repetition: if most entries are "[event], that's like [comparison]", rewrite
   several into flat verdicts, commands, questions or fragments.
 - Accuracy: does every claim trace to provided data, context, or a logged storyline?
+
+NOW CHECK THE AWARDS AND THE RECAP SEPARATELY. They are the least-verified part of the column and
+errors there are the ones people notice:
+- Every placement or counting claim ("third highest", "outscored half the league", "top two")
+  must be verified against the SCOREBOARD block line by line. If it does not match exactly,
+  correct the number or cut the claim. Do not estimate and do not round a count into a fraction.
+- Does an award title contradict that team's record? A winless team cannot be unbeatable. Move
+  the tension into the reason and rename the award.
+- Does the recap attribute a team's total to a subset of its players, or a subset's total to the
+  team? Those numbers are different; check which one you were given.
+- Does any number in the recap appear nowhere in the data you were handed? Cut it.
 - Tiers: contiguous bands, recognizable names, fresh subtitles.
 """

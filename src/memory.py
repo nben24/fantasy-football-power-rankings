@@ -104,6 +104,61 @@ def save_week(league: dict, week: int, week_data: dict) -> None:
     save_league(league)
 
 
+def tier_names_in_other_leagues(current_league_id: str, recent_weeks: int = 2) -> list[str]:
+    """Tier names this user's OTHER leagues used recently.
+
+    A stable tier skeleton is the goal *within* a league, but the same skeleton
+    across every league means someone in two of them reads the same column
+    furniture twice. These get handed to the writer as already-taken."""
+    LEAGUES_DIR.mkdir(parents=True, exist_ok=True)
+    names: list[str] = []
+    for f in sorted(LEAGUES_DIR.glob("*.json")):
+        try:
+            data = json.loads(f.read_text())
+        except json.JSONDecodeError:
+            continue
+        if data.get("id") == current_league_id:
+            continue
+        for week in sorted_week_numbers(data)[-recent_weeks:]:
+            for tier in data["weeks"][str(week)].get("writeups", {}).get("tiers", []) or []:
+                name = (tier.get("tier_name") or "").strip()
+                if name and name not in names:
+                    names.append(name)
+    return names
+
+
+def remove_storyline_events_for_week(league: dict, week: int) -> int:
+    """Strip every storyline event logged in `week`, dropping any storyline left
+    with no events at all. Must run before a week is regenerated -- storyline
+    updates append, so re-running a week otherwise logs its events a second time.
+    Returns how many events were removed."""
+    removed = 0
+    surviving = []
+    for s in get_storylines(league):
+        events = s.get("events", [])
+        kept = [e for e in events if e.get("week") != week]
+        removed += len(events) - len(kept)
+        s["events"] = kept
+        if kept:
+            surviving.append(s)
+    league["storylines"] = surviving
+    return removed
+
+
+def delete_week(league: dict, week: int) -> bool:
+    """Remove one week and anything derived from it, leaving other weeks intact.
+    Returns False if that week wasn't stored."""
+    key = str(week)
+    if key not in league.get("weeks", {}):
+        return False
+    del league["weeks"][key]
+    remove_storyline_events_for_week(league, week)
+    remaining = sorted_week_numbers(league)
+    league["current_week"] = remaining[-1] if remaining else 0
+    save_league(league)
+    return True
+
+
 def normalize_team_name(league: dict, raw_name: str) -> str:
     """Map a possibly-OCR-noisy team name to a canonical name already known
     to this league, recording the alias for next time. Unknown names are

@@ -95,9 +95,10 @@ WRITEUP_TOOL = {
                 "type": "array",
                 "description": (
                     "Group all teams into a recognizable four-part skeleton -- the good teams, the "
-                    "frauds, the mid, the embarrassments -- named in this column's voice. Tier NAMES "
-                    "stay stable week to week (a fraud-watch tier is a permanent fixture); the "
-                    "SUBTITLE carries the joke and changes every week. A one-team tier is warranted "
+                    "frauds, the mid, the embarrassments -- named in THIS league's own voice, and "
+                    "not matching names other leagues are already using. Tier NAMES stay stable week "
+                    "to week within a league; the SUBTITLE carries the joke and changes every week. "
+                    "A one-team tier is warranted "
                     "only when a team has genuinely separated from the league. Tiers together must "
                     "cover every team, best to worst, as CONTIGUOUS bands of the rank order."
                 ),
@@ -138,7 +139,12 @@ WRITEUP_TOOL = {
             },
             "awards": {
                 "type": "array",
-                "description": "Only include awards genuinely supported by the data/context. Empty list is fine.",
+                "description": (
+                    "Only include awards genuinely supported by the data/context. Empty list is fine. "
+                    "The TITLE must not contradict the team's actual record -- do not call a winless "
+                    "team unbeatable, or a first-place team an underdog. If the joke needs that "
+                    "tension, put it in the reason, not the title."
+                ),
                 "items": {
                     "type": "object",
                     "properties": {
@@ -151,7 +157,12 @@ WRITEUP_TOOL = {
             },
             "recap": {
                 "type": "string",
-                "description": "A short 'This Week in the League' columnist-style recap, 3-6 sentences.",
+                "description": (
+                    "A short 'This Week in the League' columnist-style recap, 3-6 sentences. Every "
+                    "number in it must come from the data given to you -- never attribute a team's "
+                    "total to a subset of its players, and check any placement claim against the "
+                    "scoreboard block rather than estimating it."
+                ),
             },
         },
         "required": ["week_theme", "tiers", "team_writeups", "recap", "awards"],
@@ -194,7 +205,13 @@ def build_facts_bundle(league: dict, week: int, rankings: list[dict], context_te
         lines.append("")
 
     if context_text:
-        lines.append("THIS WEEK'S USER-SUPPLIED CONTEXT (treat as fact -- came directly from the user):")
+        lines.append(
+            "RAW MATERIAL FROM THE COMMISSIONER -- true, but NOT content to report.\n"
+            "Everyone reading this column watched these games. Telling them what happened is worth\n"
+            "nothing. Use these as the SETUP for a joke about the manager, then get out -- the fact\n"
+            "itself should often be implied rather than stated. Never transcribe a line back.\n"
+            "A single event belongs to ONE team's writeup, not to both sides of the matchup."
+        )
         lines.append(context_text)
         lines.append("")
 
@@ -244,6 +261,31 @@ def build_facts_bundle(league: dict, week: int, rankings: list[dict], context_te
                     f"  {m['team_a']} {m['score_a']} vs {m['team_b']} {m['score_b']} -- {winner} won"
                 )
         lines.append("")
+
+        # Sorted, pre-counted scoreboard. Every comparative claim ("third highest",
+        # "outscored half the league") must be readable straight off this block --
+        # asking the model to sort and count scattered matchup lines produces
+        # confident approximations instead of facts.
+        scored = []
+        for m in week_data["matchups"]:
+            for team_key, score_key in (("team_a", "score_a"), ("team_b", "score_b")):
+                if m.get(score_key) is not None:
+                    scored.append((m[team_key], m[score_key]))
+        if scored:
+            scored.sort(key=lambda x: -x[1])
+            total = len(scored)
+            lines.append(
+                "SCOREBOARD, HIGHEST TO LOWEST. Any claim about placement or about how many "
+                "teams someone out-scored MUST be read directly off this list. Do not estimate, "
+                "round to 'half the league', or describe a placement you have not checked here:"
+            )
+            for i, (name, score) in enumerate(scored, start=1):
+                beat = total - i
+                lines.append(
+                    f"  #{i} of {total} -- {name} {score} (out-scored {beat} of the other "
+                    f"{total - 1} teams)"
+                )
+            lines.append("")
 
     if week_data.get("rosters"):
         lines.append("ROSTER NOTES (players actually visible in screenshots -- do not invent stats for them):")
@@ -516,6 +558,14 @@ def _normalize_tiers(writeups: dict, rankings: list[dict]) -> dict:
 def generate_writeups(league: dict, week: int, rankings: list[dict], context_text: str, angles: list[dict]) -> dict:
     facts = build_facts_bundle(league, week, rankings, context_text)
     user_content = facts + "\n\n" + _format_angles(angles)
+
+    taken = memory.tier_names_in_other_leagues(league["id"])
+    if taken:
+        user_content += (
+            "\n\nTIER NAMES ALREADY IN USE BY THIS USER'S OTHER LEAGUES -- pick different ones, "
+            "since some managers play in more than one of them and would see the same column "
+            "furniture twice:\n  " + "; ".join(taken)
+        )
     system = (
         prompts.STYLE_PHILOSOPHY
         + "\n"

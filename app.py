@@ -92,14 +92,16 @@ def format_rankings_imessage(league_name: str, week: int, week_data: dict) -> st
             if _clean_subtitle(tier_subtitle):
                 lines.append(f"({_clean_subtitle(tier_subtitle)})")
             lines.append("")
+        # Dividers separate tiers only. A rule between every team triples the
+        # scroll length in a group chat for no added structure.
         for r in teams:
             lines.append(f"{_rank_emoji(r['rank'])} {r['name']} ({_header_meta(r, week_data)})")
             lines.append("")
             if r["name"] in writeups:
                 lines.append(writeups[r["name"]])
             lines.append("")
-            lines.append(DIVIDER)
-            lines.append("")
+        lines.append(DIVIDER)
+        lines.append("")
 
     awards = week_data.get("writeups", {}).get("awards", [])
     if awards:
@@ -205,6 +207,36 @@ def render_week(league: dict, week: int, week_data: dict, context: str):
         file_name=f"week_{week}_rankings.txt",
         key=f"download_{context}_{league['id']}_{week}",
     )
+
+
+def regenerate_week_writeups(league: dict, week: int) -> dict:
+    """Re-run the narrative pipeline over a week's already-extracted data.
+
+    Skips the vision call entirely -- the scores, context and matchups are
+    already stored. Rolls back that week's storyline events first, since
+    storyline updates append and would otherwise be logged twice.
+    """
+    week_data = memory.get_week(league, week)
+    if not week_data:
+        raise ValueError(f"No stored data for week {week}")
+
+    memory.remove_storyline_events_for_week(league, week)
+    context_text = week_data.get("context", "")
+
+    ranked = rankings.compute_power_rankings(league, week)
+    week_data["rankings"] = ranked
+
+    angle_result = narratives.find_comedic_angles(league, week, ranked, context_text)
+    narratives.apply_storyline_updates(league, week, angle_result.get("storyline_updates", []))
+    capped = narratives.cap_fraud_lens_angles(angle_result.get("team_angles", []), ranked)
+
+    draft = narratives.generate_writeups(league, week, ranked, context_text, capped)
+    final = narratives.critique_and_revise(league, week, ranked, context_text, draft)
+
+    week_data["writeups"] = final
+    week_data["angles"] = capped
+    memory.save_week(league, week, week_data)
+    return final
 
 
 def reset_flow_state():
@@ -468,4 +500,39 @@ with tab_history:
         st.write("No history yet — generate this week's rankings first.")
     else:
         chosen_week = st.selectbox("Week", weeks[::-1], key="history_week_select")
+
+        with st.expander("⚙️ Redo or delete this week"):
+            st.caption(
+                "Rewriting reuses the stored scores and context — no screenshots to re-upload and "
+                "no vision call, so it costs three API calls instead of four. Other weeks are left "
+                "alone either way."
+            )
+            col_a, col_b = st.columns(2)
+
+            if col_a.button(f"🔄 Rewrite week {chosen_week}", key="history_regen_btn"):
+                with st.spinner("Rewriting the whole week..."):
+                    try:
+                        final = regenerate_week_writeups(league, int(chosen_week))
+                        st.session_state["column_profile"] = narratives.profile_writeups(
+                            final.get("team_writeups", [])
+                        )
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Couldn't rewrite that week: {e}")
+                        if DEBUG:
+                            st.exception(e)
+
+            confirm = col_b.checkbox("I'm sure", key="history_delete_confirm")
+            if col_b.button(f"🗑️ Delete week {chosen_week}", key="history_delete_btn", disabled=not confirm):
+                memory.delete_week(league, int(chosen_week))
+                st.success(f"Week {chosen_week} deleted. Other weeks untouched.")
+                st.rerun()
+
+        profile = st.session_state.get("column_profile") or {}
+        if profile.get("n"):
+            st.caption(
+                f"Column profile: {profile['n']} writeups · mean {profile['mean_words']} words "
+                f"(reference corpus ≈29) · shortest {profile['shortest']} · longest {profile['longest']}"
+            )
+
         render_week(league, chosen_week, memory.get_week(league, chosen_week), context="history")
