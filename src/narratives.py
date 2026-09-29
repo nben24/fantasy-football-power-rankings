@@ -368,6 +368,32 @@ def build_facts_bundle(league: dict, week: int, rankings: list[dict], context_te
     return "\n".join(lines)
 
 
+_LITERAL_ESCAPE = re.compile(r"\\u([0-9a-fA-F]{4})")
+
+
+def _decode_literal_escapes(text: str) -> str:
+    r"""Turn a literal backslash-u sequence into the character it names.
+
+    Models occasionally emit the six characters — inside a tool-call string
+    instead of an em-dash. Those survive JSON decoding intact, so they reach the
+    export and get pasted into a group chat verbatim. Observed in a real recap.
+    """
+    if "\\u" not in text:
+        return text
+    return _LITERAL_ESCAPE.sub(lambda m: chr(int(m.group(1), 16)), text)
+
+
+def sanitize_model_output(obj):
+    """Recursively clean every string in a tool-call result."""
+    if isinstance(obj, str):
+        return _decode_literal_escapes(obj)
+    if isinstance(obj, list):
+        return [sanitize_model_output(x) for x in obj]
+    if isinstance(obj, dict):
+        return {k: sanitize_model_output(v) for k, v in obj.items()}
+    return obj
+
+
 def _call_forced_tool(system: str, user_content: str, tool: dict) -> dict:
     client = anthropic.Anthropic()
     response = client.messages.create(
@@ -380,7 +406,7 @@ def _call_forced_tool(system: str, user_content: str, tool: dict) -> dict:
     )
     for block in response.content:
         if block.type == "tool_use":
-            return block.input
+            return sanitize_model_output(block.input)
     raise RuntimeError("Model did not return structured output.")
 
 
