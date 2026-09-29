@@ -67,7 +67,9 @@ def load_league(league_id: str) -> dict | None:
 def save_league(league: dict) -> None:
     LEAGUES_DIR.mkdir(parents=True, exist_ok=True)
     path = _path_for(league["id"])
-    path.write_text(json.dumps(league, indent=2, sort_keys=False))
+    # ensure_ascii=False so emoji, accents and em-dashes stay readable in the
+    # stored file instead of becoming Ó / — escapes. Decodes identically.
+    path.write_text(json.dumps(league, indent=2, sort_keys=False, ensure_ascii=False))
 
 
 def rename_league(league_id: str, new_name: str) -> None:

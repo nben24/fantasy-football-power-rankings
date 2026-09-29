@@ -507,6 +507,33 @@ with tab_history:
                 "no vision call, so it costs three API calls instead of four. Other weeks are left "
                 "alone either way."
             )
+            awards_feedback = st.text_input(
+                "What should change about the awards/recap? (optional)",
+                key="history_awards_feedback",
+            )
+            if st.button("🏅 Redo just the awards + recap (1 call)", key="history_awards_btn"):
+                with st.spinner("Rewriting awards and recap..."):
+                    try:
+                        wd = memory.get_week(league, int(chosen_week))
+                        result = narratives.regenerate_awards_and_recap(
+                            league,
+                            int(chosen_week),
+                            wd["rankings"],
+                            wd.get("context", ""),
+                            wd["writeups"]["team_writeups"],
+                            feedback=awards_feedback,
+                        )
+                        wd["writeups"]["week_theme"] = result["week_theme"]
+                        wd["writeups"]["awards"] = result["awards"]
+                        wd["writeups"]["recap"] = result["recap"]
+                        memory.save_week(league, int(chosen_week), wd)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Couldn't rewrite the awards: {e}")
+                        if DEBUG:
+                            st.exception(e)
+
+            st.divider()
             col_a, col_b = st.columns(2)
 
             if col_a.button(f"🔄 Rewrite week {chosen_week}", key="history_regen_btn"):

@@ -170,6 +170,43 @@ WRITEUP_TOOL = {
 }
 
 
+AWARDS_RECAP_TOOL = {
+    "name": "record_awards_and_recap",
+    "description": "Record a replacement set of weekly awards and the league recap.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "week_theme": {"type": "string", "description": "A short headline tying the week together."},
+            "awards": {
+                "type": "array",
+                "description": (
+                    "Only awards genuinely supported by the data. Empty list is fine. The TITLE must "
+                    "not contradict the team's record -- a winless team is not unbeatable."
+                ),
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "team": {"type": "string"},
+                        "reason": {"type": "string", "description": "One sentence, fact-based."},
+                    },
+                    "required": ["title", "team", "reason"],
+                },
+            },
+            "recap": {
+                "type": "string",
+                "description": (
+                    "A short 'This Week in the League' recap, 3-6 sentences. Every placement claim "
+                    "must be read off the scoreboard block, and never attribute a team's total to a "
+                    "subset of its players."
+                ),
+            },
+        },
+        "required": ["week_theme", "awards", "recap"],
+    },
+}
+
+
 SINGLE_WRITEUP_TOOL = {
     "name": "record_single_writeup",
     "description": "Record a rewritten writeup for one team.",
@@ -598,6 +635,45 @@ def critique_and_revise(league: dict, week: int, rankings: list[dict], context_t
     )
     revised = _call_forced_tool(system, user_content, WRITEUP_TOOL)
     return _normalize_tiers(revised, rankings)
+
+
+def regenerate_awards_and_recap(
+    league: dict,
+    week: int,
+    rankings: list[dict],
+    context_text: str,
+    team_writeups: list[dict],
+    feedback: str = "",
+) -> dict:
+    """Rewrite only the theme, awards and recap -- one API call, leaving every
+    team writeup untouched. These are the most error-prone part of the column
+    (they make counting claims across the whole league), so they're the piece
+    most likely to need a second pass on its own.
+
+    Returns {'week_theme', 'awards', 'recap'}.
+    """
+    facts = build_facts_bundle(league, week, rankings, context_text)
+    written = "\n".join(f"  {w['name']}: {w['narrative']}" for w in team_writeups)
+
+    user_content = (
+        facts
+        + "\n\nThe team writeups below are FINAL and will not change. Write awards and a recap "
+        "that complement them without repeating their jokes:\n"
+        + written
+    )
+    if feedback:
+        user_content += f"\n\nUSER FEEDBACK to address directly: {feedback}"
+
+    system = (
+        prompts.STYLE_PHILOSOPHY
+        + "\n"
+        + prompts.CRITICAL_RULES
+        + "\n\nYou are writing ONLY the week theme, the awards, and the recap. Before finalizing, "
+        "verify every placement or counting claim against the SCOREBOARD block line by line -- "
+        "these are the claims readers catch. Check that no award title contradicts its team's "
+        "record. Use the record_awards_and_recap tool."
+    )
+    return _call_forced_tool(system, user_content, AWARDS_RECAP_TOOL)
 
 
 def regenerate_single_writeup(
