@@ -84,6 +84,9 @@ NUMBERS -- the default is NOT to use them.
   Movement is better described than counted -- "biggest fall on the board" beats "#4 to #11".
 - Use a number only when the number IS the joke: a humiliating score, a huge blowout margin,
   a 0.16-point loss, a wild miss against projection. At most TWO numbers in a writeup.
+- Keep projected margins and real margins straight. "Favoured by 0.02" describes the forecast;
+  how much they won or lost by is a different number entirely. Never let one stand in for the
+  other when calling a game close or lopsided.
 - Round to whole numbers. Say 117, not 117.44. Keep decimals only where the decimal is
   the entire point (losing by 0.16).
 - Otherwise talk about scoring qualitatively. Points-for and points-against can be described
@@ -270,6 +273,10 @@ errors there are the ones people notice:
   the tension into the reason and rename the award.
 - Does the recap attribute a team's total to a subset of its players, or a subset's total to the
   team? Those numbers are different; check which one you were given.
+- PROJECTED MARGIN IS NOT ACTUAL MARGIN. A team favoured by 0.02 that then loses by 17 did not
+  "lose by a rounding error" -- it lost a coin flip by seventeen points. Before describing any
+  game as close, blowout, nail-biter or robbery, check the real final scores rather than the
+  projection. The gap between the two is usually the better joke anyway.
 - Does any number in the recap appear nowhere in the data you were handed? Cut it.
 - Tiers: contiguous bands, recognizable names, fresh subtitles.
 """
