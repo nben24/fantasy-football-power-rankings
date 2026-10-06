@@ -1,15 +1,18 @@
 """Transparent power-ranking engine.
 
-Baseline formula (weights redistributed when a component is unavailable):
-  season performance  25%   win/loss record
-  points scored       20%   points-per-game
-  recent form         20%   last up-to-3 weeks, win rate + margin
-  roster strength     15%   NOT scored -- screenshots expose team-level
+Formula (weights redistributed when a component is unavailable):
+  points scored       40%   points-per-game
+  recent form         30%   last up-to-3 weeks, win rate + margin
+  season performance  30%   win/loss record
+  roster strength      0%   never scored -- screenshots expose team-level
                              projections, not per-player points, so there is no
-                             honest number to compute this from. Its weight is
-                             redistributed across the rest.
-  consistency         10%   inverse of stdev of weekly scores
-  schedule context     10%   average opponent win% faced
+                             honest number to compute this from
+  consistency          0%   still computed and visible, but contributes nothing
+  schedule context     0%   same -- see BASE_WEIGHTS for why both were zeroed
+
+Scoring carries the most weight because it measures the thing a manager
+actually controls. Record is the outcome, and in head-to-head fantasy a team
+can post the second-highest score in the league and still lose.
 
 The resulting power score orders the column and nothing else -- it is never
 shown to readers and the writer is forbidden from naming it. Each team also
@@ -23,13 +26,30 @@ import statistics
 
 from src import memory
 
+# Weights chosen from measured predictive power, not intuition. Across 84
+# team-weeks in four leagues, correlation with the following week's score was:
+#
+#   recent form   +0.39     consistency   -0.25
+#   points/game   +0.39     schedule      -0.24
+#   record        +0.17     differential  +0.14
+#
+# Scoring predicts roughly 2.3x better than record, hence ~70/30. Consistency
+# and schedule are set to zero rather than deleted: both correlate NEGATIVELY
+# with future scoring because neither measures what its name suggests.
+# Consistency is -0.62 correlated with points per game (a team averaging 95
+# cannot swing 40 points, so low variance largely means low scoring), and
+# schedule strength is -0.50 correlated with a team's own record (opponents'
+# win rates include the games they played against you, so winning makes your
+# schedule look soft). They stay in the dict so the components remain visible
+# and the decision is reversible. Worth re-testing once a season has ~9 weeks
+# of history, when both have more to work with than four data points.
 BASE_WEIGHTS = {
-    "season": 0.25,
-    "points": 0.20,
-    "recent_form": 0.20,
-    "roster": 0.15,
-    "consistency": 0.10,
-    "schedule": 0.10,
+    "season": 0.30,
+    "points": 0.40,
+    "recent_form": 0.30,
+    "roster": 0.0,
+    "consistency": 0.0,
+    "schedule": 0.0,
 }
 
 RECENT_FORM_WINDOW = 3

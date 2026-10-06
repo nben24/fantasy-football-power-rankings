@@ -96,17 +96,31 @@ Power score is a transparent, weighted blend, not just standings:
 
 | Component | Weight | What it measures |
 |---|---|---|
-| Season performance | 25% | Win/loss record |
-| Points scored | 20% | Points-per-game |
-| Recent form | 20% | Last up to 3 weeks (win rate + margin) |
-| Roster strength | 15%* | Not scored — see note below |
-| Consistency | 10% | Inverse of week-to-week score variance |
-| Schedule context | 10% | Average opponent win% faced |
+| Points scored | 40% | Points-per-game |
+| Recent form | 30% | Last up to 3 weeks (win rate + margin) |
+| Season performance | 30% | Win/loss record |
+| Roster strength | 0%* | Not computable from screenshots |
+| Consistency | 0%† | Computed and visible, but contributes nothing |
+| Schedule context | 0%† | Same |
 
 \* Screenshots expose team-level projections, not per-player points, so there's no honest way to
-compute a roster-strength score — and the app is built to never invent one. That weight is
-redistributed across the other components until a real data source (e.g. an ESPN API integration)
-can supply it.
+compute a roster-strength score — and the app is built to never invent one.
+
+† **These weights were set from measured predictive power, not intuition.** Across 84 team-weeks
+of real league history, correlation with the *following* week's score was: recent form +0.39,
+points-per-game +0.39, record +0.17 — but consistency **−0.25** and schedule strength **−0.24**.
+Both were actively counterproductive, because neither measures what its name suggests:
+
+- **Consistency** is −0.62 correlated with points-per-game. A team averaging 95 can't swing 40
+  points in a week, so low variance largely means low scoring — it was a disguised penalty for
+  being good.
+- **Schedule strength** is −0.50 correlated with a team's own record. Opponents' win rates
+  include the games they played against *you*, so beating them makes your schedule look soft.
+  It was close to an inverted record metric.
+
+They're zeroed rather than deleted, so the components stay visible and the decision is
+reversible. Scoring beats record by roughly 2.3× as a predictor, which is where the ~70/30 split
+comes from.
 
 Components that can't be computed yet (consistency needs two weeks, schedule context needs
 played games) drop out the same way, so week 1 still produces a valid ranking from a narrower
