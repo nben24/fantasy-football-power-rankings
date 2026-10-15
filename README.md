@@ -1,17 +1,161 @@
-# 🏈 Fantasy Football Power Rankings
+# Fantasy Football Power Rankings
 
-A small, local-first app that turns a handful of ESPN fantasy football screenshots into a
-funny, specific, factually-defensible weekly power rankings post — in about 5 minutes per league.
+A local-first Streamlit app that turns ESPN fantasy football screenshots into a weekly power
+rankings column with humorous commentary, for a private league. Claude's vision model extracts
+structured data from the screenshots via a forced tool call, that data is cross-checked
+arithmetically against the previous week before anything is trusted, and a transparent weighted
+model computes the rankings. A three-stage LLM pipeline then writes the commentary, grounded
+throughout in deterministically computed facts rather than the model's own recollection.
 
-**On tone:** the generated output is deliberately crude. This writes trash talk for a private
-league group chat and the prompt is tuned for exactly that — it's the intended behavior, not a
-defect. Every claim is still grounded in real data; the factual rules in `src/prompts.py` are
-strict about it. If you need something publishable, this isn't the tool.
+The interesting engineering problem here is not calling an LLM — it is constraining one. Most of
+the code exists to make the model's output verifiable, to compute facts rather than ask for them,
+and to enforce in code the rules the model proved unable to follow from instructions alone.
 
-No auth, no cloud, no database server — Streamlit plus JSON files on your machine. Requires
-Python 3.10+ and an Anthropic API key.
+## Architecture
 
-## Setup (one-time)
+```mermaid
+flowchart TB
+    S[ESPN screenshots] --> E[Extraction<br/>Claude vision, forced tool call]
+    E --> V[Validation and reconciliation<br/>arithmetic cross-checks]
+    V --> R[Human review<br/>gated: only surfaces failed checks]
+    R --> P[Power rankings<br/>weighted model, no LLM]
+    P --> O[Occurrence detection<br/>deterministic, no LLM]
+    O --> A[Stage 1: angle finding]
+    A --> W[Stage 2: writeup generation]
+    W --> C[Stage 3: editorial critique]
+    C --> X[Output<br/>plain-text column for group chat]
+
+    M[(JSON league memory<br/>weeks, storylines, aliases)]
+    M -.context.-> P
+    M -.context.-> A
+    C -.storyline updates.-> M
+    X -.persisted.-> M
+```
+
+Stages 1–3 are separate API calls. Splitting them means the model decides *what the joke is*
+before it writes, and reviews its own draft afterwards, rather than doing all three jobs in one
+pass.
+
+## Data extraction and verification
+
+Screenshots are sent to Claude's vision model with `tool_choice` forced to a single tool, so the
+response is always a valid structured object rather than prose to be parsed. The schema captures
+team names, managers, records, win/loss streaks, points for and against, divisions, playoff odds,
+scores, and ESPN's projected scores.
+
+Vision output is never trusted directly. Because the scoreboard and standings screenshots overlap,
+the numbers can be **proven rather than proofread**:
+
+- season points-for must increase by exactly this week's score
+- points-against must increase by exactly the opponent's score
+- the record must advance by one game, on the correct side
+- the win/loss streak must follow from this week's result
+
+These are week-over-week deltas rather than season sums, so they hold even when a league starts
+uploading mid-season and the app has never seen earlier weeks. When every check passes the review
+table stays collapsed; when one fails it names the exact team and field. A season's first week has
+nothing to compare against and reports that honestly rather than implying verification occurred.
+
+## Ranking model
+
+The power score is a transparent weighted blend, computed in code with no LLM involvement.
+
+| Component | Weight | What it measures |
+|---|---|---|
+| Points scored | 40% | Points per game |
+| Recent form | 30% | Last up to 3 weeks (win rate and margin) |
+| Season performance | 30% | Win/loss record |
+| Roster strength | 0% | Not computable — see below |
+| Consistency | 0% | Computed and visible, contributes nothing |
+| Schedule context | 0% | Computed and visible, contributes nothing |
+
+**Roster strength is never scored.** Screenshots expose team-level projections, not per-player
+points, so there is no honest way to compute it — and the app is built to never invent a number it
+cannot derive. Its weight redistributes across the components that can be computed. The same
+mechanism handles components that are temporarily unavailable: consistency needs two weeks of
+history, schedule context needs played games, so week 1 still produces a valid ranking from a
+narrower blend, flagged internally at low confidence.
+
+**Consistency and schedule are zeroed on evidence, not preference.** Tested against 84 team-weeks
+of real league history, correlation with the *following* week's score was +0.39 for recent form,
++0.39 for points per game and +0.17 for record — but **−0.25 for consistency and −0.24 for
+schedule strength**. Neither measures what its name implies: consistency is −0.62 correlated with
+points per game, because a team averaging 95 cannot swing 40 points, making low variance a proxy
+for low scoring; schedule strength is −0.50 correlated with a team's own record, because
+opponents' win rates include the games they played against you. They are zeroed rather than
+deleted so the values stay visible and the decision is reversible.
+
+The resulting score orders the column and nothing else. It is never shown to readers, and the
+writing stage is explicitly forbidden from naming it.
+
+## Narrative pipeline
+
+Before any writing happens, `src/occurrences.py` detects what actually occurred that week from
+data already on hand — blowouts, one-score games, scoring streaks, large misses against ESPN's
+projection, rank swings, playoff-odds collapses, and cases where a team outscored every opponent
+except the one it played. Sixteen occurrence types, all deterministic and free.
+
+A team with nothing notable receives an explicit empty marker, and that silence is load-bearing:
+it is what produces a one-line entry rather than a paragraph manufactured out of season averages.
+Length follows material.
+
+The three LLM stages then run in sequence:
+
+1. **Angle finding** — selects the comedic premise for each team from the detected occurrences,
+   user-supplied context, and active storylines. Also proposes storyline updates.
+2. **Writeup generation** — writes to the selected angle, at a length set by how much material
+   exists.
+3. **Editorial critique** — reviews the draft against explicit failure modes and rewrites what
+   fails, including a separate verification pass over the awards and recap.
+
+Every generation is measured against a reference corpus of past columns, and the result is shown
+in the UI: mean word count, spread, and any rule violations such as exceeding the length ceiling
+or naming the power score. Drift is visible the week it happens rather than months later.
+
+## Design decisions
+
+**Forced tool calls for all structured output.** Every model call uses
+`tool_choice={"type": "tool", ...}`, so responses are schema-conforming objects. No prose parsing,
+no retry-on-malformed-JSON, no partial states.
+
+**Rules enforced in code where the model proved unreliable.** Instructions alone did not hold for
+several constraints, so they are implemented deterministically instead:
+
+- `cap_fraud_lens_angles` limits how many teams may use the same record-versus-quality framing.
+  Two real generations showed the model could not self-count and enforce this during critique, so
+  it runs on the returned angle data before writing begins — at zero additional API cost.
+- `_normalize_tiers` rebuilds tier groupings from the authoritative rank order, since the model
+  sometimes grouped teams thematically across non-adjacent ranks.
+- `sanitize_model_output` decodes literal escape sequences that occasionally appear as text in
+  tool-call strings and would otherwise reach the final output verbatim.
+- `profile_writeups` measures each generation against the reference corpus and surfaces
+  violations in the UI.
+
+**Conditions rather than style dials.** The prompt specifies what must be true given the inputs,
+not stylistic quotas. Length is a function of how much a team's week actually contained, with a
+hard ceiling applied regardless. Techniques are permitted rather than required — an instruction
+to use a device "often" reliably produces it every single week, which is precisely how a voice
+becomes a tic. Where a technique was under-used, the fix was removing the prohibition on it
+rather than adding a mandate.
+
+**Storylines as structured memory, not replayed text.** Multi-week narratives are stored as typed
+records (title, teams, status, dated events) on the league. Future weeks receive only the
+storylines relevant to each team, rather than every past week's full prose. This keeps prompt size
+flat as the season grows and avoids the model reusing old wording verbatim instead of writing new
+material.
+
+**Targeted regeneration.** Three granularities, so fixing one thing does not mean paying to redo
+everything: a single team's writeup (one API call, leaving the rest of the page untouched), the
+awards and recap alone (one call — these make league-wide counting claims and are the most
+error-prone section), or a full week rewritten from already-extracted data (three calls, no
+re-upload and no vision call). Each path rolls back that week's storyline events first, since
+storyline updates append and would otherwise be recorded twice.
+
+**JSON files over a database.** One file per league holds the entire history. No server, no
+migrations, no auth. The persistence layer is small enough to read in one sitting, and the data is
+inspectable with a text editor.
+
+## Setup
 
 ```bash
 cd fantasy-football-power-rankings
@@ -20,201 +164,77 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 cp .env.example .env
-# edit .env and set ANTHROPIC_API_KEY=sk-ant-...
-# (get a key at https://console.anthropic.com/settings/keys)
+# set ANTHROPIC_API_KEY in .env
+# (https://console.anthropic.com/settings/keys)
 ```
 
-## Running it every week
+Requires Python 3.10+ and an Anthropic API key. `ANTHROPIC_MODEL` and `FPR_DEBUG` are optional
+overrides documented in `.env.example`.
+
+## Running it
 
 ```bash
 source .venv/bin/activate
 streamlit run app.py
 ```
 
-This opens the app at `http://localhost:8501`.
+Opens at `http://localhost:8501`. Per league, per week:
 
-Weekly workflow, per league:
+1. Select the league in the sidebar, or create it on first use.
+2. Upload the scoreboard and standings screenshots. Standings columns often span two screenshots
+   on a phone; both are merged.
+3. Set the week number (defaults to last week plus one).
+4. Optionally add a sentence or two of context — trades, injuries, a notable lineup decision.
+   This is the highest-value input available, since it covers events the screenshots cannot show.
+5. Extract. Check the reconciliation banner; open the review table only if something failed.
+6. Generate. This runs the ranking model, then the three narrative stages.
+7. Copy the plain-text output, or regenerate a single team, the awards, or the whole week.
 
-1. **Select the league** in the sidebar (or create it, the first time).
-2. **Upload screenshots** — the scoreboard (matchups, scores, projections) and the standings
-   table. Standings columns often span two screenshots on a phone; upload both and they get
-   merged. More screenshots is generally better, and none are strictly required.
-3. Set the **Week** number (it defaults to "last week + 1").
-4. Optionally type 1–3 sentences of **context** — trades, trash talk, injuries, a bad benching.
-   This is the highest-value input you can give it, because these are the events the screenshots
-   can't show. It's also stored as narrative history for future callbacks.
-5. Click **🔍 Extract Data From Screenshots**. Claude reads the images and pulls out team names,
-   records, streaks, PF/PA, playoff odds, divisions, scores and ESPN's projected scores.
-6. **Check the reconciliation banner.** Green means every number was verified against last week
-   (see below) and you can move straight on. Red names the specific cell that doesn't add up.
-   The full editable table is still there, collapsed, if you want it.
-7. Click **🔥 GENERATE POWER RANKINGS**. This computes the power scores, finds the best
-   comedic angle for each team, writes the commentary around those angles, then runs a
-   second editorial pass to cut generic filler and tighten jokes (four API calls total: one
-   to read the screenshots, three for the narrative pipeline below).
-8. Read it. If one team's writeup missed, expand **🔄 Regenerate** under that team, optionally
-   type what should change, and it rewrites just that one line (one API call, not a full redo —
-   everything else on the page stays exactly as-is).
-9. Copy it (there's a code block with a built-in copy button, formatted as plain text for
-   iMessage/group chats — no markdown symbols) or hit **Download TXT**, paste into your group chat.
+The History tab retrieves any previous week and provides the rewrite and delete controls. Sidebar
+panels hold persistent league notes and logged events that future weeks can draw on.
 
-Repeat for each of your leagues — the app remembers each league's full history independently.
-
-Use the **History** tab to pull up any previous week's rankings, and the sidebar's
-**League Notes** / **Log an Event** panels to keep persistent context (rivalries, running
-jokes, trades) that future weeks' commentary can draw on.
-
-## How it avoids getting facts wrong
-
-A savage, specific writeup built on a misread score is the worst possible output, so extracted
-numbers get **proven rather than eyeballed**. The two screenshot types overlap, and that
-redundancy allows arithmetic verification:
-
-- season PF must rise by exactly this week's score, and PA by the opponent's
-- the record must advance by one game, on the correct side
-- the streak must follow from this week's result (was `W4`, won → must read `W5`)
-
-These are week-over-week deltas, so they work even when you start uploading mid-season and the
-app has never seen weeks 1–8. Everything reconciling gets you one green line; anything that
-doesn't names the exact team and field. Week 1 of a season has nothing to compare against, so
-that one upload is worth a manual look.
-
-## What the writeups are built from
-
-`src/occurrences.py` detects things that actually *happened* — blowouts, nail-biters, streaks,
-scoring the most points in the league and still losing, big misses against ESPN's projection,
-rank swings, playoff-odds collapses — and hands those to the writer instead of season averages.
-
-A team that did nothing gets an explicit *nothing notable* marker, and that silence is the point:
-it's what produces a one-line dismissal instead of a paragraph manufactured out of rate stats.
-Length follows material, which is why a real column comes out uneven the way a human-written one
-is.
-
-## How the ranking works
-
-Power score is a transparent, weighted blend, not just standings:
-
-| Component | Weight | What it measures |
-|---|---|---|
-| Points scored | 40% | Points-per-game |
-| Recent form | 30% | Last up to 3 weeks (win rate + margin) |
-| Season performance | 30% | Win/loss record |
-| Roster strength | 0%* | Not computable from screenshots |
-| Consistency | 0%† | Computed and visible, but contributes nothing |
-| Schedule context | 0%† | Same |
-
-\* Screenshots expose team-level projections, not per-player points, so there's no honest way to
-compute a roster-strength score — and the app is built to never invent one.
-
-† **These weights were set from measured predictive power, not intuition.** Across 84 team-weeks
-of real league history, correlation with the *following* week's score was: recent form +0.39,
-points-per-game +0.39, record +0.17 — but consistency **−0.25** and schedule strength **−0.24**.
-Both were actively counterproductive, because neither measures what its name suggests:
-
-- **Consistency** is −0.62 correlated with points-per-game. A team averaging 95 can't swing 40
-  points in a week, so low variance largely means low scoring — it was a disguised penalty for
-  being good.
-- **Schedule strength** is −0.50 correlated with a team's own record. Opponents' win rates
-  include the games they played against *you*, so beating them makes your schedule look soft.
-  It was close to an inverted record metric.
-
-They're zeroed rather than deleted, so the components stay visible and the decision is
-reversible. Scoring beats record by roughly 2.3× as a predictor, which is where the ~70/30 split
-comes from.
-
-Components that can't be computed yet (consistency needs two weeks, schedule context needs
-played games) drop out the same way, so week 1 still produces a valid ranking from a narrower
-blend, flagged at `confidence: low`.
-
-**The power score is a sorting mechanism, not content.** It orders the column and nothing else —
-the writer is explicitly forbidden from naming it, citing it, or narrating rank positions. Real
-power-rankings columns don't talk about their own internal metric, and neither does this one.
-
-The writeups are grouped into tiers with a deliberately stable skeleton — roughly *good /
-frauds / mid / embarrassments* — where the tier names stay recognizable week to week and the
-subtitle carries that week's joke. A league recognizes "Fraud Watch" as a recurring institution;
-inventing four brand-new tier names every week reads as effort rather than voice.
-
-## How the writing works
-
-The narrative pipeline is three LLM calls, run in sequence, not one call trying to do everything:
-
-```
-rankings + occurrences   -- what happened, detected deterministically (no LLM)
-      ↓
-find_comedic_angles      -- "what's the actual joke for each team this week?"
-      ↓                     also flags multi-week storylines worth remembering
-generate_writeups        -- writes to the angle it was given, at a length set by the material
-      ↓
-critique_and_revise      -- rewrites anything generic, over-long, or all the same shape
-      ↓
-final power rankings
-```
-
-The angle-finder picks from a taxonomy of comedic premises (trade regret, fraud/inflated record,
-collapse, comeback, historical callback, statistical absurdity, etc.) instead of defaulting to
-"cite the PPG." It also detects when something happening this week is worth tracking across
-future weeks (a trade whose consequences are still unfolding, a prediction that keeps aging
-badly) and saves it as a **storyline** — a structured, persistent multi-week narrative stored on
-the league (see `memory.get_storylines()`). Future weeks' angle-finding gets handed only the
-storylines relevant to each team, instead of every past week's full writeup text.
-
-The prompt is written as **conditions rather than style dials**, which is the main thing keeping
-output from reading as formulaic. Length is a function of how much happened; a team with nothing
-notable gets a one-line dismissal and a hard 60-word ceiling applies to everything. Techniques
-like team-name wordplay are permitted rather than mandated — a rule that says "use X often"
-reliably produces X every single week, which is how a voice becomes a tic.
-
-Each generation is measured against the reference corpus and the result is shown in the UI: word
-count mean, spread, and any rule violations. Drift is visible the week it happens rather than
-months later. See `src/prompts.py` for the full philosophy.
-
-### Feeding it your real style (`reference/`)
-
-Copy `reference/TEMPLATE.md` to `reference/my_columns.md`, paste in your own past columns, then
-ask Claude to analyze them and update `src/prompts.py` accordingly. The working copy is
-gitignored, so real manager names stay on your machine.
-
-This is a one-time calibration pass, not a runtime lookup — the app never reads the file while
-generating, and old wording should never be reused verbatim. See `reference/README.md` for what
-makes good calibration material.
-
-## Project layout
-
-```
-app.py                  Streamlit UI — the whole weekly workflow
-src/
-  memory.py              JSON persistence: leagues, weeks, events, storylines, team-name normalization
-  data_extraction.py     Screenshot -> structured data (Claude vision, forced tool call)
-  data_validation.py     Name normalization, shape checks, and week-over-week reconciliation
-  occurrences.py         Deterministic detection of what actually happened this week
-  rankings.py            The power-ranking formula
-  narratives.py          Angle-finding -> writeup generation -> editorial critique pipeline
-  prompts.py             Shared tone/style/critical-rules text, comedy taxonomy
-data/leagues/*.json      One file per league — your entire league history lives here (gitignored)
-reference/               Your past columns, for a one-time voice calibration pass (see its README)
-tests/                   Mock-data tests for ranking math, validation, occurrences, storylines
-```
-
-## Running the tests
+## Tests
 
 ```bash
 source .venv/bin/activate
 pip install -r requirements-dev.txt
-python -m pytest tests/ -v
+python -m pytest tests/ -q
 ```
 
-The suite runs entirely on hand-built fixtures — no screenshots, no API calls, no cost. It covers
-the ranking maths, name normalization, storyline logic, occurrence detection, and the
-reconciliation checks.
+**72 tests, running in roughly one second.** The suite uses hand-built fixtures exclusively — no
+screenshots, no API calls, no cost — and covers the ranking mathematics, team-name normalization
+and alias resolution, storyline lifecycle, occurrence detection, week-over-week reconciliation
+(including deliberately corrupted inputs to confirm the checks actually fail), output
+sanitization, and the week deletion and rewrite paths.
 
-## Scope
+## Project layout
 
-Deliberately not included: ESPN API integration (screenshots only), multi-user support, cloud
-hosting, authentication. Known candidates for later: ESPN sync, a luck index, Monte Carlo playoff
-odds, auto-detected trades, Discord publishing.
+```
+app.py                  Streamlit UI, export formatting, workflow orchestration
+src/
+  data_extraction.py    Screenshots to structured data (Claude vision, forced tool call)
+  data_validation.py    Name normalization, shape checks, week-over-week reconciliation
+  occurrences.py        Deterministic detection of what happened this week
+  rankings.py           The weighted power-ranking model
+  narratives.py         Angle finding, writeup generation, editorial critique, profiling
+  prompts.py            Shared tone, style and factual-constraint text
+  memory.py             JSON persistence: leagues, weeks, storylines, team-name aliases
+tests/                  Fixture-based tests, no network access
+reference/              Template for calibrating voice against your own past columns
+data/leagues/*.json     One file per league (gitignored — contains real names)
+```
 
-The clearest current limitation is that screenshots show team-level data, so player-level material
-— a bad benching, an injury, a lopsided trade — can only reach the column through the weekly
-context box. That's usually where the sharpest lines come from, so it's worth the fifteen seconds
-of typing.
+## Known limitations and roadmap
+
+- **No ESPN API integration.** Screenshots only, which caps what is knowable: team-level data is
+  available, per-player data is not. A bad lineup decision or an injury can only reach the column
+  through the weekly context box. API access would remove that ceiling and enable a real roster
+  strength component.
+- **Projections are unverified.** Every other extracted field is cross-checked against the
+  previous week, but a projection is a standalone number with no redundancy to check it against.
+- **League-wide superlatives across weeks are not yet pre-computed.** Single-week placement claims
+  are verifiable against a pre-sorted scoreboard supplied to the model; season-long leaderboards
+  and rank-movement rankings are not, and remain the main residual source of factual error.
+- **Single user, single machine.** No authentication, no cloud hosting, no multi-user support.
+- Planned: a luck index, Monte Carlo playoff odds, automatic trade detection from roster diffs,
+  and per-stage model selection to reduce cost.
