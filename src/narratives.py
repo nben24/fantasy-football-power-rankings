@@ -246,8 +246,9 @@ def recent_angle_types(league: dict, team: str, week: int, lookback: int = ANGLE
     for w in memory.sorted_week_numbers(league):
         if not (week - lookback <= w < week):
             continue
+        names = memory.name_variants(league, team)
         for a in league["weeks"][str(w)].get("angles") or []:
-            if a.get("team") == team and a.get("comedy_type"):
+            if a.get("team") in names and a.get("comedy_type"):
                 out.append(f"W{w}: {a['comedy_type']}")
     return out
 

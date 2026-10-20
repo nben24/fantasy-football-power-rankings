@@ -191,7 +191,8 @@ def _prev_streak(league, week, name):
     if prev is None:
         return None
     pd = memory.get_week(league, prev) or {}
-    t = next((x for x in pd.get("teams", []) if x["name"] == name), None)
+    names = memory.name_variants(league, name)
+    t = next((x for x in pd.get("teams", []) if x["name"] in names), None)
     return _streak_tuple((t or {}).get("streak"))
 
 
@@ -200,7 +201,8 @@ def _prev_playoff_pct(league, week, name):
     if prev is None:
         return None
     pd = memory.get_week(league, prev) or {}
-    t = next((x for x in pd.get("teams", []) if x["name"] == name), None)
+    names = memory.name_variants(league, name)
+    t = next((x for x in pd.get("teams", []) if x["name"] in names), None)
     return (t or {}).get("playoff_pct")
 
 

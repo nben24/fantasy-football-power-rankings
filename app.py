@@ -302,6 +302,26 @@ if active_league_id:
             reset_flow_state()
             st.rerun()
 
+    with st.sidebar.expander("🔁 Team Renamed"):
+        st.caption(
+            "When a manager renames their team mid-season the new name matches nothing, so the "
+            "team reads as brand new — no previous rank, and its history stranded under the old "
+            "label. Link them here. Past weeks keep the name they were published under."
+        )
+        known = sorted({t["name"] for w in league.get("weeks", {}).values() for t in w.get("teams", [])})
+        former_map = league.get("former_names") or {}
+        if former_map:
+            st.caption("Already linked: " + "; ".join(f"{', '.join(v)} → {k}" for k, v in former_map.items()))
+        old_nm = st.selectbox("Previous name", [""] + known, key="rename_old")
+        new_nm = st.selectbox("Current name", [""] + known, key="rename_new")
+        if st.button("Link these names", key="rename_team_btn", disabled=not (old_nm and new_nm)):
+            if old_nm == new_nm:
+                st.warning("Those are the same name.")
+            else:
+                memory.record_rename(league, old_nm, new_nm)
+                st.success(f"Linked. Regenerate a week to pick up {new_nm}'s full history.")
+                st.rerun()
+
     with st.sidebar.expander("📝 League Notes (managers, rivalries, running jokes)"):
         notes = st.text_area(
             "Persistent narrative context — used for flavor, not stated as fact unless true.",

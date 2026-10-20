@@ -161,6 +161,40 @@ def delete_week(league: dict, week: int) -> bool:
     return True
 
 
+def name_variants(league: dict, name: str) -> set[str]:
+    """Every label this team has gone by, including its current one.
+
+    A manager renaming their team mid-season produces a string that matches
+    nothing: fuzzy matching can't connect "LeanISLaw" to
+    "GetExcitedForGoyBallYouSlaves". Without this the team reads as brand new --
+    no previous rank, recent form computed from a single game, and six weeks of
+    history stranded under the old label."""
+    variants = {name}
+    for current, olds in (league.get("former_names") or {}).items():
+        if name == current or name in olds:
+            variants.add(current)
+            variants.update(olds)
+    return variants
+
+
+def record_rename(league: dict, old_name: str, new_name: str) -> None:
+    """Link a renamed team to its own history without rewriting past weeks.
+
+    Stored weeks keep whatever label they were published under -- those columns
+    were already sent. Only lookups are taught that the two names are the same
+    team, and future extractions normalize the old name onto the new one."""
+    old_name, new_name = old_name.strip(), new_name.strip()
+    if not old_name or not new_name or old_name == new_name:
+        return
+    former = league.setdefault("former_names", {})
+    # Carry across any names the old identity had already collected.
+    inherited = former.pop(old_name, [])
+    existing = former.get(new_name, [])
+    former[new_name] = sorted({*existing, *inherited, old_name})
+    league.setdefault("team_aliases", {})[old_name] = new_name
+    save_league(league)
+
+
 def normalize_team_name(league: dict, raw_name: str) -> str:
     """Map a possibly-OCR-noisy team name to a canonical name already known
     to this league, recording the alias for next time. Unknown names are
@@ -273,9 +307,10 @@ def relevant_storylines_for_team(league: dict, team_name: str, up_to_week: int, 
         weeks = [e["week"] for e in s.get("events", []) if e["week"] <= up_to_week]
         return max(weeks) if weeks else -1
 
+    names = name_variants(league, team_name)
     candidates = [
         s for s in get_storylines(league)
-        if team_name in s.get("teams", []) and last_relevant_week(s) >= 0
+        if names & set(s.get("teams", [])) and last_relevant_week(s) >= 0
     ]
     candidates.sort(key=last_relevant_week, reverse=True)
     return candidates[:limit]

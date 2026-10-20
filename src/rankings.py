@@ -82,14 +82,15 @@ def _min_max_normalize(raw: dict[str, float]) -> dict[str, float]:
 def _team_game_history(league: dict, team_name: str, up_to_week: int) -> list[dict]:
     """All completed matchups for this team across weeks <= up_to_week, in order."""
     history = []
+    names = memory.name_variants(league, team_name)
     for w in sorted(int(k) for k in league.get("weeks", {}).keys()):
         if w > up_to_week:
             continue
         week_data = league["weeks"][str(w)]
         for m in week_data.get("matchups", []):
-            if team_name not in (m.get("team_a"), m.get("team_b")):
+            if not names & {m.get("team_a"), m.get("team_b")}:
                 continue
-            is_a = m["team_a"] == team_name
+            is_a = m["team_a"] in names
             own = m.get("score_a") if is_a else m.get("score_b")
             opp_score = m.get("score_b") if is_a else m.get("score_a")
             opponent = m.get("team_b") if is_a else m.get("team_a")
@@ -178,7 +179,8 @@ def compute_power_rankings(league: dict, week: int) -> list[dict]:
     if prev_week is not None:
         prev_week_data = memory.get_week(league, prev_week)
         for r in (prev_week_data or {}).get("rankings", []):
-            prev_rankings[r["name"]] = r["rank"]
+            for variant in memory.name_variants(league, r["name"]):
+                prev_rankings[variant] = r["rank"]
 
     stored_weeks = sorted(int(k) for k in league.get("weeks", {}).keys() if int(k) <= week)
     weeks_of_history = len(stored_weeks)
