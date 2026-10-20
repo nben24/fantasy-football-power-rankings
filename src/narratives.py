@@ -579,6 +579,15 @@ def profile_writeups(team_writeups: list[dict]) -> dict:
         if len(decimals) > 1:
             violations.append(f"{w['name']}: {len(decimals)} decimal numbers")
 
+    for label, teams in find_repeated_constructions(team_writeups).items():
+        violations.append(f"repeated construction — {label}: {', '.join(teams)}")
+
+    short = sum(1 for n in counts if n < 20)
+    if len(counts) >= 10 and short < 3:
+        violations.append(
+            f"only {short} writeup(s) under 20 words — a column this flat reads as formulaic"
+        )
+
     return {
         "n": len(counts),
         "mean_words": round(statistics.mean(counts), 1),
@@ -586,6 +595,62 @@ def profile_writeups(team_writeups: list[dict]) -> dict:
         "longest": max(counts),
         "violations": violations,
     }
+
+
+# Recurring rhetorical moves, as opposed to recurring words. find_repeated_imagery
+# only flags distinctive terms of 7+ characters and stopwords "nobody" and "still",
+# so it is structurally blind to two teams getting the same joke in different
+# vocabulary. Six real weeks produced "nobody respects you" ten times across 72
+# writeups -- three in one column, on three different teams.
+#
+# Each entry is (pattern, max_teams_before_flagging). Thresholds are the 90th
+# percentile of the author's own 252-writeup reference corpus, NOT intuition --
+# an earlier set chosen by eye would have flagged the author's own columns as
+# repetitive. A construction is only a tic when it runs past the rate the real
+# columns use it at. "that's not X, that's Y" is the exception: it appears zero
+# times in 16 reference columns, so any use is off-style rather than excessive.
+_CONSTRUCTION_FAMILIES = {
+    "the league doesn't rate you (nobody / no one)": (r"\b(?:nobody|no one)\b|not one person", 5),
+    "opens on a negation (No X / Nothing X)": (r"^\s*(?:No|Not|Nothing)\b", 1),
+    "did X and still Y": (r"\band still\b|\band you still\b", 2),
+    "that's not X, that's Y": (r"that'?s not .{3,40}?,\s*that'?s", 0),
+    "closes on keep + imperative": (r"\bkeep (?:going|winning|doing|it)\b", 1),
+    "at this point": (r"\bat this point\b", 1),
+    "opens on 'You'": (r"^\s*You\b", 3),
+    "simile template (like a/an ...)": (r"\blike (?:a|an|the)\b", 6),
+}
+
+
+def find_repeated_constructions(team_writeups: list[dict]) -> dict:
+    """Rhetorical moves used by more teams than their threshold allows.
+
+    Returns {family_label: [team names]}. Complements find_repeated_imagery,
+    which catches repeated images; this catches two teams being handed the same
+    joke with different words.
+    """
+    hits = {}
+    for label, (pattern, allowed) in _CONSTRUCTION_FAMILIES.items():
+        teams = [
+            w["name"] for w in team_writeups
+            if re.search(pattern, w["narrative"], re.IGNORECASE)
+        ]
+        if len(teams) > allowed:
+            hits[label] = teams
+    return hits
+
+
+def _format_construction_warnings(hits: dict) -> str:
+    if not hits:
+        return ""
+    lines = [
+        "REPEATED CONSTRUCTIONS DETECTED ACROSS THIS COLUMN. Each of these rhetorical moves is "
+        "used by more teams than it should be. Two teams making the same observation in "
+        "different words reads as one joke stretched across the column. Keep it for whichever "
+        "team it is sharpest on and rebuild the others around something else:"
+    ]
+    for label, teams in hits.items():
+        lines.append(f"  {label} -> {', '.join(teams)}")
+    return "\n".join(lines)
 
 
 def apply_storyline_updates(league: dict, week: int, updates: list[dict]) -> None:
@@ -676,6 +741,15 @@ def critique_and_revise(league: dict, week: int, rankings: list[dict], context_t
         + "\n\nRewrite only the entries that fail the critique questions below. Keep entries that already "
         "pass as-is. Return the FULL writeup (theme, tiers, all teams) via the tool, revised or not."
     )
+
+    # Detected rather than left to self-assessment: counting your own repeated
+    # constructions across twelve entries is exactly the kind of check the model
+    # has proven unreliable at.
+    repeated = _format_construction_warnings(
+        find_repeated_constructions(draft.get("team_writeups", []))
+    )
+    if repeated:
+        user_content += "\n\n" + repeated
     system = (
         prompts.STYLE_PHILOSOPHY
         + "\n"

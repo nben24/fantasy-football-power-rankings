@@ -51,6 +51,56 @@ def test_repeated_angle_is_visible_to_the_caller():
     assert len(used) == 3
 
 
+def _writeups(*texts):
+    return [{"name": f"T{i}", "narrative": t} for i, t in enumerate(texts)]
+
+
+def test_off_style_construction_flags_on_first_use():
+    """'that's not X, that's Y' appears zero times in 252 reference writeups, so
+    any use is off-style rather than merely excessive."""
+    hits = narratives.find_repeated_constructions(
+        _writeups("That's not a loss, that's a formality.", "Scored 90 and went home.")
+    )
+    assert "that's not X, that's Y" in hits
+
+
+def test_common_construction_tolerated_at_the_author_s_own_rate():
+    """The reference corpus averages 1.9 'nobody' lines per column. Flagging two
+    would flag the author's own writing."""
+    hits = narratives.find_repeated_constructions(
+        _writeups("Nobody rates you.", "No one is scared of this team.", "Scored 120, won.")
+    )
+    assert "the league doesn't rate you (nobody / no one)" not in hits
+
+
+def test_common_construction_flags_once_it_runs_past_that_rate():
+    hits = narratives.find_repeated_constructions(
+        _writeups(*(["Nobody rates you."] * 6 + ["Scored 120, won."]))
+    )
+    assert len(hits["the league doesn't rate you (nobody / no one)"]) == 6
+
+
+def test_clean_column_produces_no_flags():
+    hits = narratives.find_repeated_constructions(
+        _writeups(
+            "Dropped 150 on a team that had already given up.",
+            "Four straight wins and the chat has gone quiet about it.",
+            "Benched his best player and lost by two.",
+        )
+    )
+    assert hits == {}
+
+
+def test_profile_reports_a_flat_column():
+    flat = _writeups(*(["word " * 28] * 12))
+    assert any("under 20 words" in v for v in narratives.profile_writeups(flat)["violations"])
+
+
+def test_profile_accepts_a_column_with_real_spread():
+    varied = _writeups(*(["word " * 10] * 4 + ["word " * 30] * 5 + ["word " * 45] * 3))
+    assert not any("under 20 words" in v for v in narratives.profile_writeups(varied)["violations"])
+
+
 def test_occurrences_are_capped_per_team():
     """By mid-season a team can trip five detectors at once and earn a paragraph
     it did nothing to deserve."""
