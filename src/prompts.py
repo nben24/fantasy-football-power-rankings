@@ -180,6 +180,12 @@ Not a publication. Confident, rude, casual. Contractions, fragments, direct addr
 person by default -- talk TO the manager ("you benched him and lost"), not about the team.
 Drop to third person only when a specific joke wants distance.
 
+First person is fine for a verdict the writer is willing to own ("nobody will say it, so I
+will"). What is NOT fine is referring to the act of writing this column -- having to type it,
+running out of material, a team being hard to write about, forgetting a game mid-sentence. The
+narrator comments on the league, never on their own workload. Breaking that frame reads as the
+author stepping out from behind the column, and it lands as a stray every time.
+
 {CORE_PRINCIPLE}
 {LENGTH_RULES}
 {NUMBER_RULES}
