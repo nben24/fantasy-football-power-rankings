@@ -58,16 +58,19 @@ LENGTH_RULES = """
 LENGTH IS DECIDED BY MATERIAL. This is the single most important rule.
 
 Read the "WHAT HAPPENED" line for each team, then:
-- "NOTHING NOTABLE HAPPENED" -> ONE line, 10-25 words. A dismissal, not a story. Do NOT
-  manufacture a narrative out of averages. This is the most common case in any given week
-  and handling it correctly is most of the job. If the team is not just quiet but genuinely
-  bad, you can still rag on them -- briefly.
-- ONE occurrence -> 20-35 words.
-- TWO OR MORE occurrences, or a real event supplied in this week's context -> 35-50 words.
+- "NOTHING NOTABLE HAPPENED" -> ONE line, 8-20 words. A dismissal, not a story. Do NOT
+  manufacture a narrative out of averages. If the team is not just quiet but genuinely bad,
+  you can still rag on them -- briefly.
+- ONE occurrence -> 15-30 words.
+- TWO OR MORE occurrences, or a real event supplied in this week's context -> 30-50 words.
 - HARD CEILING: 60 words. No writeup may exceed it, ever.
 
-Aim for a column averaging around 30 words per team. Early-season weeks run shorter --
-there's no history to draw on yet, and pretending otherwise is how filler gets written.
+THE SPREAD MATTERS AS MUCH AS THE AVERAGE. A column where every entry lands between 25 and 35
+words has failed, however good the individual lines are -- that flatness is what makes a human
+reader say "these all sound the same." At least three or four entries in a twelve-team column
+should come in under 20 words. One should usually be under 12. Note that as a season
+accumulates history more teams pick up occurrences, so the pressure is always toward everything
+drifting long; push back against it.
 
 A one-sentence gut punch is a complete, correct writeup. It is not a lesser effort.
 """
@@ -107,9 +110,11 @@ move on. Name the institution and keep going -- never build a sentence chain or 
 around it. A column where several writeups sound like a true-crime podcast has failed, even
 if each line is individually sharp.
 
-Team-name wordplay is a first-class move, not a last resort -- twisting a manager's own team
-name is one of the most reliable jokes available. Use it whenever the name gives you an
-opening; skip it when it doesn't.
+Team-name wordplay is allowed and often lands, but it is NOT a default. Every team name affords
+some opening, so "use it when the name gives you one" collapses into using it every week for
+every team -- which is exactly what happened over six real weeks, where several teams got a
+name joke six times out of six. If a team's name carried the joke recently, that door is closed
+this week; find the joke in what happened instead.
 """
 
 CORE_PRINCIPLE = """
@@ -152,7 +157,11 @@ HOW TO CHOOSE:
   or a short shot at how bad/boring they are. Do NOT invent a narrative from rate stats to
   fill the space. "Nothing happened to them and that's the joke" is a correct, complete angle
   and you should return it often.
-- A team-name joke is a strong option any week the name affords one.
+- DO NOT REPEAT A TEAM'S RECENT ANGLE. Each team's block may carry an "ALREADY USED on this
+  team" line listing the comedy_type chosen for it in recent weeks. Those are off limits --
+  pick a genuinely different premise, even if the old one still fits. A team-name joke three
+  weeks running stops being a running bit and becomes the only thing the column can think of
+  about that manager.
 - The record-vs-quality fraud signal is available but the column already has a fraud tier to
   carry that idea -- only use it as an individual angle when a team's gap is the story.
 
@@ -249,8 +258,14 @@ I. Did an institutional comparison (legal, medical, federal, criminal) run longe
    clause? Trim it to one clause.
 
 ACROSS THE FULL SET:
+- COUNT THE SHORT ONES. How many entries are under 20 words? In a twelve-team column it should
+  be at least three, and one should usually be under 12. If the whole set sits between 25 and 35,
+  cut the thinnest entries down hard -- do not trim every writeup evenly, which just produces a
+  shorter flat column. Find the teams with the least material and make those genuinely brief.
 - Read it back to back. Do the lengths vary because the material varies, or is everything the
   same size? The latter is the main failure mode.
+- Does any team get the same KIND of joke it got last week -- its name, the same running bit, the
+  same framing? Recurring material should evolve or be dropped, not repeated with new wording.
 - Is the whole column stuck in one comparison register? If several writeups reach for crime or
   medicine, rewrite most of them toward ordinary life -- consumer goods, work, school, games.
 - Repeated words or images across two different teams in the SAME week read as a mistake.

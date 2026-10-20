@@ -28,6 +28,7 @@ PLAYOFF_NEAR_LOCK = 95.0
 # margin rather than tying it by a rounding error.
 MIN_WEEKS_FOR_EXTREME = 6
 EXTREME_MARGIN = 3.0
+MAX_OCCURRENCES_PER_TEAM = 3
 
 
 def _fmt(n):
@@ -165,8 +166,14 @@ def detect(league: dict, week: int, ranked: list[dict]) -> dict:
                 add(name, "playoff_swing",
                     f"playoff odds {direction} from {_fmt(prev_pct)}% to {_fmt(pct)}%", 8)
 
+    # Keep only the strongest few. Thresholds were set in week 4 with four games
+    # of history; by week 6 streaks, rank movement and high/low water marks have
+    # all unlocked, so a team can accumulate five "notable" items and earn a
+    # paragraph it hasn't done anything to deserve. Everything beyond the top
+    # three is padding.
     for name in teams:
         teams[name].sort(key=lambda o: -o["weight"])
+        del teams[name][MAX_OCCURRENCES_PER_TEAM:]
 
     return {"teams": teams, "league": league_notes}
 

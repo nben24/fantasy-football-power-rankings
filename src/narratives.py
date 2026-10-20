@@ -230,6 +230,28 @@ def tidy_record(record) -> str:
     return str(record)
 
 
+ANGLE_LOOKBACK_WEEKS = 3
+
+
+def recent_angle_types(league: dict, team: str, week: int, lookback: int = ANGLE_LOOKBACK_WEEKS) -> list[str]:
+    """The comedy_type used for this team in the preceding weeks, oldest first.
+
+    The facts bundle deliberately withholds past writeup prose so old wording
+    can't be reused verbatim -- but that also left the angle-finder blind to its
+    own repetition. Six weeks of one league produced `team-name joke` for the
+    same team every single week. Feeding back the device (not the text) closes
+    that blind spot without reopening the copying one.
+    """
+    out = []
+    for w in memory.sorted_week_numbers(league):
+        if not (week - lookback <= w < week):
+            continue
+        for a in league["weeks"][str(w)].get("angles") or []:
+            if a.get("team") == team and a.get("comedy_type"):
+                out.append(f"W{w}: {a['comedy_type']}")
+    return out
+
+
 def build_facts_bundle(league: dict, week: int, rankings: list[dict], context_text: str) -> str:
     """Objective facts + targeted history (trajectory + relevant storylines).
     Deliberately does NOT dump full past-week writeup prose -- storylines are
@@ -281,6 +303,9 @@ def build_facts_bundle(league: dict, week: int, rankings: list[dict], context_te
             gap = abs(r.get("record_rank", r["rank"]) - r["rank"])
             if gap >= 3:
                 lines.append(f"   record-vs-quality: {r['record_vs_power']} (gap of {gap} places)")
+        used = recent_angle_types(league, r["name"], week)
+        if used:
+            lines.append(f"   ALREADY USED on this team (pick something else): {'; '.join(used)}")
     lines.append("")
 
     if detected["league"]:
