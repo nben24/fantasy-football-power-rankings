@@ -154,3 +154,132 @@ def test_streak_read_from_extracted_standings():
             t["streak"] = "W4"
     detected, _ = _detect(league, 2)
     assert "streak" in _kinds(detected, "A")
+
+
+def test_a_projection_miss_says_who_was_favored():
+    """'projected 117, lost' was written up as 'projected to cruise' about a team
+    projected 117 against 126. The occurrence now says which side was favored."""
+    lg = build_league_from_matchups("Odds", {1: [("Furia", 88.42, "Echo", 99.68)]})
+    lg["weeks"]["1"]["matchups"][0].update(projected_a=117.08, projected_b=126.5)
+    ranked = rankings.compute_power_rankings(lg, 1)
+    texts = [o["text"] for o in occurrences.detect(lg, 1, ranked)["teams"].get("Furia", [])]
+    miss = [t for t in texts if "under" in t]
+    assert miss and "the underdog against Echo" in miss[0]
+
+
+def _three_games():
+    lg = build_league_from_matchups("Sup", {1: [
+        ("Alpha", 87.0, "Bravo", 181.22), ("Charlie", 87.7, "Delta", 119.38),
+        ("Furia", 88.42, "Echo", 99.68)]})
+    projs = [(131.88, 125.92), (120.52, 113.74), (117.08, 126.48)]
+    for m, (pa, pb) in zip(lg["weeks"]["1"]["matchups"], projs):
+        m.update(projected_a=pa, projected_b=pb)
+    return lg
+
+
+def test_only_the_true_leader_is_called_the_biggest_miss():
+    """Charlie missed by 32.8 and was written up as 'the worst miss of the week';
+    Alpha had missed by 44.9."""
+    lg = _three_games()
+    ranked = rankings.compute_power_rankings(lg, 1)
+    det = occurrences.detect(lg, 1, ranked)
+    assert any("biggest miss of projection: Alpha" in o["text"] for o in det["league"])
+    charlie = " ".join(o["text"] for o in det["teams"]["Charlie"])
+    assert "biggest" not in charlie
+
+
+def test_the_bench_gap_leader_is_named_league_wide():
+    lg = _three_games()
+    lg["weeks"]["1"]["lineups"] = [
+        {"team": "Alpha", "players": [
+            {"name": "Goedert", "position": "TE", "slot": "TE", "started": True, "points": 1.4, "played": True},
+            {"name": "Kittle", "position": "TE", "slot": "BE", "started": False, "points": 18.0, "played": True}]},
+        {"team": "Charlie", "players": [
+            {"name": "Puka", "position": "WR", "slot": "WR", "started": True, "points": 0.0, "played": False},
+            {"name": "Waddle", "position": "WR", "slot": "BE", "started": False, "points": 21.8, "played": True}]},
+    ]
+    ranked = rankings.compute_power_rankings(lg, 1)
+    det = occurrences.detect(lg, 1, ranked)
+    assert any(o["text"].startswith("biggest bench gap: Charlie") for o in det["league"])
+    assert "biggest bench gap" not in " ".join(o["text"] for o in det["teams"]["Alpha"])
+
+
+def test_a_tie_at_the_top_gets_no_superlative():
+    lg = build_league_from_matchups("Tie", {1: [("A", 80.0, "B", 120.0), ("C", 80.0, "D", 120.0)]})
+    for m in lg["weeks"]["1"]["matchups"]:
+        m.update(projected_a=110.0, projected_b=110.0)
+    det = occurrences.detect(lg, 1, rankings.compute_power_rankings(lg, 1))
+    assert not any("biggest miss" in o["text"] for o in det["league"])
+
+
+def _bench_league(margin_loss, gap_points):
+    """Team A loses by `margin_loss` with a bench gap of `gap_points`; C has a
+    bigger gap so A is never the league leader."""
+    lg = build_league_from_matchups("Bench", {1: [
+        ("A", 100.0, "B", 100.0 + margin_loss), ("C", 90.0, "D", 150.0)]})
+    lg["weeks"]["1"]["lineups"] = [
+        {"team": "A", "players": [
+            {"name": "Starter", "position": "WR", "slot": "WR", "started": True, "points": 2.0, "played": True},
+            {"name": "Benched", "position": "WR", "slot": "BE", "started": False, "points": 2.0 + gap_points, "played": True}]},
+        {"team": "C", "players": [
+            {"name": "S", "position": "WR", "slot": "WR", "started": True, "points": 1.0, "played": True},
+            {"name": "B", "position": "WR", "slot": "BE", "started": False, "points": 31.0, "played": True}]},
+    ]
+    det = occurrences.detect(lg, 1, rankings.compute_power_rankings(lg, 1))
+    return [o for o in det["teams"]["A"] if o["kind"] == "bench_disaster"]
+
+
+def test_an_ordinary_bench_gap_is_not_a_story():
+    """Week 3 had a bench line in 8 of 12 writeups because any 10-point gap
+    qualified; most rosters leave that much most weeks."""
+    assert _bench_league(margin_loss=30.0, gap_points=14.0) == []
+
+
+def test_a_bench_gap_that_would_have_won_is_kept_and_says_so():
+    found = _bench_league(margin_loss=5.0, gap_points=12.0)
+    assert found and "enough to have won the game" in found[0]["text"]
+
+
+def test_a_big_bench_gap_in_a_loss_says_it_would_not_have_mattered():
+    found = _bench_league(margin_loss=40.0, gap_points=22.0)
+    assert found and "would still have lost" in found[0]["text"]
+
+
+def _many_bench_gaps(n):
+    """n games, each loser leaving 25 on the bench."""
+    games = [(f"L{i}", 100.0, f"W{i}", 140.0) for i in range(n)]
+    lg = build_league_from_matchups("Many", {1: games})
+    lg["weeks"]["1"]["lineups"] = [
+        {"team": f"L{i}", "players": [
+            {"name": f"s{i}", "position": "WR", "slot": "WR", "started": True, "points": 1.0, "played": True},
+            {"name": f"b{i}", "position": "WR", "slot": "BE", "started": False, "points": 26.0 + i, "played": True}]}
+        for i in range(n)]
+    return lg
+
+
+def test_never_more_than_three_bench_lines_a_week():
+    """The user's ceiling for the whole column."""
+    lg = _many_bench_gaps(6)
+    det = occurrences.detect(lg, 1, rankings.compute_power_rankings(lg, 1))
+    lines = [o for occ in det["teams"].values() for o in occ
+             if o["kind"] in ("bench_disaster", "lineup_reversal")]
+    assert len(lines) == 3
+    # the biggest gaps are the ones kept
+    assert {o["players"][1] for o in lines} == {"b5", "b4", "b3"}
+
+
+def test_a_reversal_keeps_the_no_show_it_replaced():
+    """Gridiron Gang benched Waddle for 21.8 in week 2 behind Puka Nacua, who
+    didn't play, after starting Waddle for 1.2 in week 1."""
+    lg = build_league_from_matchups("Rev", {1: [("Doc", 116.0, "X", 113.0)],
+                                            2: [("Doc", 133.0, "X", 113.0)]})
+    lg["weeks"]["1"]["lineups"] = [{"team": "Doc", "players": [
+        {"name": "Waddle", "position": "WR", "slot": "WR", "started": True, "points": 1.2, "played": True},
+        {"name": "Diggs", "position": "WR", "slot": "BE", "started": False, "points": 15.5, "played": True}]}]
+    lg["weeks"]["2"]["lineups"] = [{"team": "Doc", "players": [
+        {"name": "Puka", "position": "WR", "slot": "WR", "started": True, "points": 0.0, "played": False},
+        {"name": "Waddle", "position": "WR", "slot": "BE", "started": False, "points": 21.8, "played": True}]}]
+    det = occurrences.detect(lg, 2, rankings.compute_power_rankings(lg, 2))
+    kinds = {o["kind"] for o in det["teams"]["Doc"]}
+    assert {"lineup_reversal", "started_did_not_play"} <= kinds
+    assert "bench_disaster" not in kinds

@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 import pandas as pd
 import streamlit as st
@@ -6,7 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from src import data_extraction, data_validation, memory, narratives, rankings
+from src import data_extraction, data_validation, espn_sync, memory, narratives, rankings
 
 st.set_page_config(page_title="Fantasy Power Rankings", page_icon="🏈", layout="wide")
 
@@ -258,15 +259,47 @@ if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TO
 
 
 # ---------- sidebar: league management ----------
+#
+# Every league-specific widget is keyed with the league id. Unkeyed (or
+# globally keyed) widgets keep their first value when the league changes, so
+# switching leagues showed one league's ESPN id and notes -- and pressing Save
+# would have written them into whichever league was now selected.
+
+def _lk(name: str) -> str:
+    return f"{name}_{active_league_id}"
+
+
+def _select_league(league_id):
+    """Switch leagues from a button. The selectbox already exists by then and
+    Streamlit forbids writing its key, so the choice is applied next run."""
+    st.session_state["_pending_league"] = league_id
+    reset_flow_state()
+
 
 st.sidebar.title("🏈 Leagues")
 
 leagues = memory.list_leagues()
-league_options = {lg["name"]: lg["id"] for lg in leagues}
+league_names = {lg["id"]: lg["name"] for lg in leagues}
+
+if "_pending_league" in st.session_state:
+    pending = st.session_state.pop("_pending_league")
+    st.session_state.pop("league_select", None)
+    if pending:
+        st.session_state["league_select"] = pending
+    else:
+        st.query_params.pop("league", None)
 
 if leagues:
-    selected_name = st.sidebar.selectbox("Select League", list(league_options.keys()))
-    active_league_id = league_options[selected_name]
+    # The choice survives a browser refresh through the URL (?league=...).
+    # Without a key or a remembered value the selectbox fell back to the
+    # first league alphabetically on every new session.
+    if st.session_state.get("league_select") not in league_names:
+        from_url = st.query_params.get("league")
+        st.session_state["league_select"] = from_url if from_url in league_names else leagues[0]["id"]
+    active_league_id = st.sidebar.selectbox(
+        "League", list(league_names), format_func=league_names.get, key="league_select",
+    )
+    st.query_params["league"] = active_league_id
 else:
     st.sidebar.info("No leagues yet — create one below.")
     active_league_id = None
@@ -275,74 +308,79 @@ if st.session_state.get("active_league_id") != active_league_id:
     st.session_state["active_league_id"] = active_league_id
     reset_flow_state()
 
-with st.sidebar.expander("➕ Create League"):
-    new_name = st.text_input("League name", key="new_league_name")
-    new_desc = st.text_area("Description (optional)", key="new_league_desc")
-    if st.button("Create", key="create_league_btn") and new_name.strip():
-        new_id = memory.create_league(new_name.strip(), new_desc.strip())
-        st.session_state["active_league_id"] = new_id
-        reset_flow_state()
-        st.rerun()
+with st.sidebar.popover("➕ New league", width="stretch"):
+    with st.form("create_league_form", clear_on_submit=True, border=False):
+        new_name = st.text_input("League name")
+        new_desc = st.text_area("Description (optional)")
+        if st.form_submit_button("Create", type="primary") and new_name.strip():
+            _select_league(memory.create_league(new_name.strip(), new_desc.strip()))
+            st.rerun()
 
 if active_league_id:
     league = memory.load_league(active_league_id)
+    st.sidebar.divider()
+    st.sidebar.caption(f"**{league['name']}** settings")
 
-    with st.sidebar.expander("✏️ Rename League"):
-        renamed = st.text_input("New name", value=league["name"], key="rename_input")
-        if st.button("Rename", key="rename_btn") and renamed.strip() and renamed.strip() != league["name"]:
-            memory.rename_league(active_league_id, renamed.strip())
-            st.rerun()
+    with st.sidebar.expander("📝 League notes"):
+        st.caption("Managers, rivalries, running jokes. Used for flavor, never stated as fact unless true.")
+        with st.form(_lk("notes_form"), border=False):
+            notes = st.text_area("Notes", value=league.get("league_notes", ""), height=200,
+                                 label_visibility="collapsed")
+            if st.form_submit_button("Save notes"):
+                league["league_notes"] = notes
+                memory.save_league(league)
+                st.toast("League notes saved.")
+                st.rerun()
 
-    with st.sidebar.expander("🗑️ Delete League"):
-        st.caption("This permanently deletes all history for this league.")
-        confirm = st.checkbox("I understand, delete it", key="delete_confirm")
-        if st.button("Delete League", key="delete_btn", disabled=not confirm):
-            memory.delete_league(active_league_id)
-            st.session_state["active_league_id"] = None
-            reset_flow_state()
-            st.rerun()
+    with st.sidebar.expander("📌 Log an event"):
+        st.caption("Trades, injuries, waiver moves — kept as history for future callbacks.")
+        with st.form(_lk("event_form"), clear_on_submit=True, border=False):
+            ev_week = st.number_input("Week", min_value=1, value=league.get("current_week", 1) or 1)
+            ev_type = st.selectbox("Type", ["trade", "waiver", "injury", "decision", "other"])
+            ev_details = st.text_input("Details")
+            if st.form_submit_button("Log event") and ev_details.strip():
+                memory.add_event(league, int(ev_week), {"type": ev_type, "week": int(ev_week),
+                                                        "details": ev_details.strip()})
+                memory.save_league(league)
+                st.toast("Event logged.")
+                st.rerun()
 
-    with st.sidebar.expander("🔁 Team Renamed"):
+    with st.sidebar.expander("🔁 A team renamed itself"):
         st.caption(
-            "When a manager renames their team mid-season the new name matches nothing, so the "
-            "team reads as brand new — no previous rank, and its history stranded under the old "
-            "label. Link them here. Past weeks keep the name they were published under."
+            "A renamed team matches nothing, so it reads as brand new — no previous rank, its "
+            "history stranded under the old label. Link the two names here."
         )
         known = sorted({t["name"] for w in league.get("weeks", {}).values() for t in w.get("teams", [])})
         former_map = league.get("former_names") or {}
         if former_map:
             st.caption("Already linked: " + "; ".join(f"{', '.join(v)} → {k}" for k, v in former_map.items()))
-        old_nm = st.selectbox("Previous name", [""] + known, key="rename_old")
-        new_nm = st.selectbox("Current name", [""] + known, key="rename_new")
-        if st.button("Link these names", key="rename_team_btn", disabled=not (old_nm and new_nm)):
-            if old_nm == new_nm:
-                st.warning("Those are the same name.")
-            else:
-                memory.record_rename(league, old_nm, new_nm)
-                st.success(f"Linked. Regenerate a week to pick up {new_nm}'s full history.")
+        with st.form(_lk("team_rename_form"), border=False):
+            old_nm = st.selectbox("Previous name", [""] + known)
+            new_nm = st.selectbox("Current name", [""] + known)
+            if st.form_submit_button("Link names"):
+                if not (old_nm and new_nm):
+                    st.warning("Pick both names.")
+                elif old_nm == new_nm:
+                    st.warning("Those are the same name.")
+                else:
+                    memory.record_rename(league, old_nm, new_nm)
+                    st.toast(f"Linked. Regenerate a week to pick up {new_nm}'s full history.")
+                    st.rerun()
+
+    with st.sidebar.expander("✏️ Rename or delete league"):
+        with st.form(_lk("rename_form"), border=False):
+            renamed = st.text_input("League name", value=league["name"])
+            if st.form_submit_button("Rename") and renamed.strip() and renamed.strip() != league["name"]:
+                memory.rename_league(active_league_id, renamed.strip())
+                st.toast("Renamed.")
                 st.rerun()
-
-    with st.sidebar.expander("📝 League Notes (managers, rivalries, running jokes)"):
-        notes = st.text_area(
-            "Persistent narrative context — used for flavor, not stated as fact unless true.",
-            value=league.get("league_notes", ""),
-            height=200,
-            key="league_notes_input",
-        )
-        if st.button("Save Notes", key="save_notes_btn"):
-            league["league_notes"] = notes
-            memory.save_league(league)
-            st.toast("League notes saved.")
-
-    with st.sidebar.expander("📌 Log an Event"):
-        st.caption("Trades, injuries, waiver moves, etc. — stored as objective history for future callbacks.")
-        ev_week = st.number_input("Week", min_value=1, value=league.get("current_week", 1) or 1, key="event_week")
-        ev_type = st.selectbox("Type", ["trade", "waiver", "injury", "decision", "other"], key="event_type")
-        ev_details = st.text_input("Details", key="event_details")
-        if st.button("Log Event", key="log_event_btn") and ev_details.strip():
-            memory.add_event(league, int(ev_week), {"type": ev_type, "week": int(ev_week), "details": ev_details.strip()})
-            memory.save_league(league)
-            st.toast("Event logged.")
+        st.divider()
+        st.caption("Deleting removes every week of history for this league.")
+        confirm = st.checkbox("I understand, delete it", key=_lk("delete_confirm"))
+        if st.button("🗑️ Delete league", key=_lk("delete_btn"), disabled=not confirm):
+            memory.delete_league(active_league_id)
+            _select_league(None)
+            st.rerun()
 
 
 # ---------- main ----------
@@ -360,8 +398,99 @@ if league.get("description"):
 tab_week, tab_history = st.tabs(["This Week", "History"])
 
 with tab_week:
-    st.subheader("Upload This Week's Screenshots")
-    st.caption("Standings, matchups, points, rosters — upload whatever you have. No fixed set required.")
+    # One week field drives everything below: the ESPN pull, the screenshot
+    # path, and the week the result is saved under. Two separate fields let a
+    # week-2 pull be filed as week 9. It follows the league: when a week is
+    # written (or deleted) it moves to the next unwritten one on its own.
+    written = [int(k) for k, v in (league.get("weeks") or {}).items() if v.get("writeups")]
+    next_week = (max(written) if written else 0) + 1
+    week_key = f"week_input_{active_league_id}"
+    seen_key = f"_next_week_seen_{active_league_id}"
+    if st.session_state.get(seen_key) != next_week:
+        st.session_state[seen_key] = next_week
+        st.session_state[week_key] = next_week
+    week_num = st.number_input("Week", min_value=1, step=1, key=week_key)
+
+    espn_creds = bool(os.environ.get("ESPN_S2") and os.environ.get("ESPN_SWID"))
+
+    def _espn_settings_form(connected: bool):
+        with st.form(f"espn_form_{active_league_id}", border=False):
+            c1, c2 = st.columns([3, 1])
+            espn_id = c1.text_input(
+                "ESPN league ID", value=str(league.get("espn_league_id") or ""),
+                help="The number after leagueId= in the league's ESPN URL.",
+            )
+            espn_year = c2.number_input(
+                "Season", min_value=2019, max_value=2100,
+                value=int(league.get("espn_season") or datetime.now().year),
+            )
+            b1, b2 = st.columns(2)
+            save = b1.form_submit_button("Save" if connected else "Connect", type="primary")
+            disconnect = connected and b2.form_submit_button("Disconnect")
+        if save:
+            cleaned = espn_id.strip()
+            if cleaned and not cleaned.isdigit():
+                st.error("The league ID is just the number from the URL.")
+            else:
+                league["espn_league_id"] = cleaned or None
+                league["espn_season"] = int(espn_year)
+                memory.save_league(league)
+                st.toast("ESPN settings saved.")
+                st.rerun()
+        if disconnect:
+            league["espn_league_id"] = None
+            memory.save_league(league)
+            st.toast("Disconnected from ESPN.")
+            st.rerun()
+        st.caption(
+            "✅ ESPN cookies found in .env (shared by every league)" if espn_creds
+            else "⚠️ ESPN_S2 / ESPN_SWID aren't set in .env, so pulling will fail"
+        )
+
+    if not league.get("espn_league_id"):
+        with st.expander("🔗 Connect this league to ESPN to skip screenshots"):
+            st.caption("Pulls scores, standings, projections and full lineups straight from ESPN.")
+            _espn_settings_form(connected=False)
+    else:
+        st.subheader("Pull This Week From ESPN")
+        st.caption(
+            f"ESPN league {league['espn_league_id']}, {league.get('espn_season') or datetime.now().year} "
+            "season. Pulls scores, standings, projections and full lineups, including who was benched."
+        )
+        pull_week = int(week_num)
+        if st.button(f"⬇️ Pull week {pull_week} from ESPN", type="primary", key="espn_pull_btn"):
+            with st.spinner("Fetching from ESPN..."):
+                try:
+                    extracted = espn_sync.fetch_week(
+                        int(league["espn_league_id"]),
+                        int(league.get("espn_season") or datetime.now().year),
+                        int(pull_week),
+                    )
+                    extracted = data_validation.normalize_extracted_data(league, extracted)
+                    memory.save_league(league)
+                    st.session_state["extracted"] = extracted
+                    st.session_state["warnings"] = data_validation.validate_extracted_data(extracted)
+                    st.session_state["reconciliation"] = data_validation.reconcile_week(
+                        league, int(pull_week), extracted
+                    )
+                    st.session_state["flow_stage"] = "extracted"
+                    n_lineups = len(extracted.get("lineups") or [])
+                    st.success(f"Pulled week {pull_week}: {len(extracted['teams'])} teams, "
+                               f"{len(extracted['matchups'])} matchups, {n_lineups} lineups.")
+                except Exception as e:
+                    st.error(f"Couldn't pull from ESPN: {e}")
+                    st.caption(
+                        "If this says access denied, the espn_s2 cookie has probably expired — "
+                        "copy a fresh one from your browser into .env. Screenshots still work below."
+                    )
+                    if DEBUG:
+                        st.exception(e)
+        with st.expander("⚙️ ESPN settings"):
+            _espn_settings_form(connected=True)
+        st.divider()
+
+    st.subheader("Or Upload Screenshots")
+    st.caption("Standings and scoreboard. Still works if the ESPN pull fails or cookies expire.")
     uploaded = st.file_uploader(
         "Screenshots",
         type=["png", "jpg", "jpeg", "webp"],
@@ -369,13 +498,10 @@ with tab_week:
         key=f"uploader_{active_league_id}",
     )
 
-    default_week = (league.get("current_week") or 0) + 1
-    week_num = st.number_input("Week", min_value=1, value=default_week, step=1, key="week_input")
-
     context_text = st.text_area(
         "Anything important that happened this week? (optional)",
         placeholder="e.g. Mike traded Bijan last week and immediately lost. John has been talking shit all week.",
-        key="context_input",
+        key=f"context_input_{active_league_id}",
     )
 
     if st.button("🔍 Extract Data From Screenshots", type="primary", disabled=not uploaded):
@@ -399,7 +525,7 @@ with tab_week:
         extracted = st.session_state["extracted"]
         warnings = st.session_state["warnings"]
 
-        if extracted.get("week") and extracted["week"] != week_num:
+        if extracted.get("source") != "espn_api" and extracted.get("week") and extracted["week"] != week_num:
             st.info(f"The screenshots suggest this might be Week {extracted['week']}. Adjust the Week field above if needed.")
 
         if warnings:
@@ -426,16 +552,27 @@ with tab_week:
                 columns=["name", "manager", "record", "streak", "points_for", "points_against",
                          "playoff_pct", "division", "standing"]
             )
-            edited_teams = st.data_editor(teams_df, num_rows="dynamic", key="teams_editor", use_container_width=True)
+            edited_teams = st.data_editor(teams_df, num_rows="dynamic", key=f"teams_editor_{active_league_id}", use_container_width=True)
 
             matchups_df = pd.DataFrame(extracted.get("matchups", [])).reindex(
                 columns=["team_a", "score_a", "projected_a", "team_b", "score_b", "projected_b"]
             )
-            edited_matchups = st.data_editor(matchups_df, num_rows="dynamic", key="matchups_editor", use_container_width=True)
+            edited_matchups = st.data_editor(matchups_df, num_rows="dynamic", key=f"matchups_editor_{active_league_id}", use_container_width=True)
 
-        if st.button("🔥 GENERATE POWER RANKINGS", type="primary"):
+        # Pulled data knows its own week for certain. If the field was changed
+        # after pulling, saving would file one week's results under another.
+        pulled_week = extracted.get("week") if extracted.get("source") == "espn_api" else None
+        week_mismatch = pulled_week is not None and int(pulled_week) != int(week_num)
+        if week_mismatch:
+            st.error(
+                f"This data was pulled for week {pulled_week}, but the Week field says "
+                f"{int(week_num)}. Set it back to {pulled_week}, or pull week {int(week_num)}."
+            )
+
+        if st.button("🔥 GENERATE POWER RANKINGS", type="primary", disabled=week_mismatch):
             with st.spinner("Crunching numbers and writing rankings..."):
                 try:
+                    narratives.reset_usage()
                     teams_list = edited_teams.dropna(subset=["name"]).to_dict("records")
                     matchups_list = edited_matchups.dropna(subset=["team_a", "team_b"]).to_dict("records")
                     # clean NaN -> None for JSON-friendliness
@@ -448,6 +585,12 @@ with tab_week:
                         "teams": teams_list,
                         "matchups": matchups_list,
                         "rosters": extracted.get("rosters", []),
+                        # Carried through from the pull. The editable tables only
+                        # cover teams and matchups, so without this the lineup
+                        # data -- the whole point of the API path -- is dropped
+                        # between extraction and generation.
+                        "lineups": extracted.get("lineups", []),
+                        "source": extracted.get("source", "screenshots"),
                         "context": context_text,
                         "events": (memory.get_week(league, int(week_num)) or {}).get("events", []),
                     }
@@ -477,6 +620,7 @@ with tab_week:
                     st.session_state["column_profile"] = narratives.profile_writeups(
                         final.get("team_writeups", [])
                     )
+                    st.session_state["token_usage"] = narratives.cache_summary()
 
                     st.session_state["flow_stage"] = "done"
                     st.session_state["done_week"] = int(week_num)
@@ -497,6 +641,16 @@ with tab_week:
                 f"Column profile: {profile['n']} writeups · mean {profile['mean_words']} words "
                 f"(reference corpus ≈29) · shortest {profile['shortest']} · longest {profile['longest']}"
             )
+            usage = st.session_state.get("token_usage") or {}
+            if usage.get("calls"):
+                cached = usage["cache_read"]
+                billed = usage["input"] + usage["cache_write"]
+                st.caption(
+                    f"Tokens: {billed:,} input · {cached:,} read from cache · "
+                    f"{usage['output']:,} output across {usage['calls']} calls"
+                    + ("" if cached else "  ⚠️ no cache hits — prompts may have changed")
+                )
+
             if profile.get("violations"):
                 with st.expander(f"⚠️ {len(profile['violations'])} style rule violation(s)"):
                     for v in profile["violations"]:
@@ -519,7 +673,7 @@ with tab_history:
     if not weeks:
         st.write("No history yet — generate this week's rankings first.")
     else:
-        chosen_week = st.selectbox("Week", weeks[::-1], key="history_week_select")
+        chosen_week = st.selectbox("Week", weeks[::-1], key=f"history_week_select_{active_league_id}")
 
         with st.expander("⚙️ Redo or delete this week"):
             st.caption(
@@ -529,7 +683,7 @@ with tab_history:
             )
             awards_feedback = st.text_input(
                 "What should change about the awards/recap? (optional)",
-                key="history_awards_feedback",
+                key=f"history_awards_feedback_{active_league_id}",
             )
             if st.button("🏅 Redo just the awards + recap (1 call)", key="history_awards_btn"):
                 with st.spinner("Rewriting awards and recap..."):
@@ -569,7 +723,7 @@ with tab_history:
                         if DEBUG:
                             st.exception(e)
 
-            confirm = col_b.checkbox("I'm sure", key="history_delete_confirm")
+            confirm = col_b.checkbox("I'm sure", key=f"history_delete_confirm_{active_league_id}")
             if col_b.button(f"🗑️ Delete week {chosen_week}", key="history_delete_btn", disabled=not confirm):
                 memory.delete_week(league, int(chosen_week))
                 st.success(f"Week {chosen_week} deleted. Other weeks untouched.")

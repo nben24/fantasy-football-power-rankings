@@ -1,5 +1,6 @@
 streamlit>=1.38
-anthropic>=0.40
+anthropic>=1.5
 pandas>=2.0
 python-dotenv>=1.0
 pillow>=10.0
+espn-api>=1.0.1

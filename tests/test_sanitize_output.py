@@ -16,7 +16,7 @@ def test_literal_escape_becomes_the_real_character():
 
 
 def test_real_characters_are_left_alone():
-    text = "CORAZÓN ❤️ — already fine"
+    text = "CAMPEÓN ❤️ — already fine"
     assert narratives._decode_literal_escapes(text) == text
 
 
@@ -39,7 +39,7 @@ def test_sanitize_walks_nested_tool_output():
 
 
 def test_handles_accented_and_emoji_escapes():
-    assert narratives._decode_literal_escapes(f"CORAZ{BS}u00d3N") == "CORAZÓN"
+    assert narratives._decode_literal_escapes(f"CAMPE{BS}u00d3N") == "CAMPEÓN"
 
 
 def test_non_escape_backslashes_survive():

@@ -3,12 +3,10 @@ using Claude's vision + forced tool-call output. No manual transcription."""
 
 import base64
 import io
-import os
 
-import anthropic
+from src import llm
 from PIL import Image
 
-MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-5")
 
 EXTRACT_TOOL = {
     "name": "record_league_data",
@@ -169,25 +167,11 @@ def extract_from_screenshots(uploaded_files: list, context_hint: str = "") -> di
     if not uploaded_files:
         raise ValueError("No screenshots provided.")
 
-    client = anthropic.Anthropic()
-
     content = [_image_block(f) for f in uploaded_files]
     instruction = "Extract the structured league data from these screenshots."
     if context_hint:
         instruction += f"\n\nFor context, the user mentioned: {context_hint}"
     content.append({"type": "text", "text": instruction})
 
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=4096,
-        system=EXTRACTION_SYSTEM_PROMPT,
-        tools=[EXTRACT_TOOL],
-        tool_choice={"type": "tool", "name": "record_league_data"},
-        messages=[{"role": "user", "content": content}],
-    )
-
-    for block in response.content:
-        if block.type == "tool_use":
-            return block.input
-
-    raise RuntimeError("Model did not return structured data.")
+    # Static system prompt is cached; the images after it never are.
+    return llm.call_tool(EXTRACTION_SYSTEM_PROMPT, content, EXTRACT_TOOL)

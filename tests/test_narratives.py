@@ -49,3 +49,36 @@ def test_normalize_tiers_is_a_noop_on_already_contiguous_input():
     rankings = [{"name": "Team1", "rank": 1}, {"name": "Team2", "rank": 2}, {"name": "Team3", "rank": 3}]
     fixed = narratives._normalize_tiers(clean, rankings)
     assert [t["team_names"] for t in fixed["tiers"]] == [["Team1", "Team2"], ["Team3"]]
+
+
+def test_previous_tier_names_come_from_the_last_written_week():
+    """The prompt asked for stable tier names but never showed last week's,
+    so every week renamed all four."""
+    lg = {"weeks": {
+        "1": {"writeups": {"tiers": [{"tier_name": "Top Shelf"}, {"tier_name": " Beige "}]}},
+        "2": {"writeups": {"tiers": [{"tier_name": "Adults' Table"}]}},
+        "3": {"teams": []},
+    }}
+    assert narratives.previous_tier_names(lg, 3) == ["Adults' Table"]
+    assert narratives.previous_tier_names(lg, 2) == ["Top Shelf", "Beige"]
+    assert narratives.previous_tier_names(lg, 1) == []
+
+
+def test_more_than_three_bench_lines_is_flagged():
+    w = [{"name": f"T{i}", "narrative": "Left a guy on the bench again."} for i in range(4)]
+    assert "bench line" in narratives.find_repeated_constructions(w)
+    assert "bench line" not in narratives.find_repeated_constructions(w[:3])
+
+
+def test_earlier_headlines_are_shown_to_the_writer():
+    """Weeks 2 and 3 ran 'Projections Are Fan Fiction' and '... Now' because
+    the writer never saw last week's headline."""
+    lg = {"weeks": {
+        "1": {"writeups": {"week_theme": "The Projections Are Fired"}},
+        "2": {"writeups": {"week_theme": "Projections Are Fan Fiction"}},
+        "3": {"teams": []},
+    }}
+    assert narratives.previous_themes(lg, 3) == [
+        "week 1: The Projections Are Fired", "week 2: Projections Are Fan Fiction"]
+    assert "Fan Fiction" in narratives._previous_themes_block(lg, 3)
+    assert narratives._previous_themes_block(lg, 1) == ""

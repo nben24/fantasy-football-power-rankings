@@ -29,10 +29,182 @@ PLAYOFF_NEAR_LOCK = 95.0
 MIN_WEEKS_FOR_EXTREME = 6
 EXTREME_MARGIN = 3.0
 MAX_OCCURRENCES_PER_TEAM = 3
+BIG_BENCH_GAP = 20.0  # below this, a bench gap only counts if it cost the game
+MAX_BENCH_LINES_PER_WEEK = 3  # the user's ceiling for the whole column
+REVERSAL_SWING = 10.0  # the player's own score must move this much between the two calls
+
+
+BENCH_GAP = 10.0  # points a benched player beat a startable one by, to be worth saying
 
 
 def _fmt(n):
     return f"{n:.2f}".rstrip("0").rstrip(".")
+
+
+def _eligible_slots(position: str, starters: list[dict]) -> list[dict]:
+    """Starters this player could have replaced.
+
+    Slot labels are slash-delimited for flex ("RB/WR/TE"), so a benched tight
+    end is eligible for the TE slot *and* the flex. D/ST contains a slash but
+    is one position, not a flex.
+    """
+    out = []
+    for s in starters:
+        slot = s.get("slot") or ""
+        allowed = {slot} if slot == "D/ST" else {p for p in slot.split("/") if p}
+        if position in allowed:
+            out.append(s)
+    return out
+
+
+def _decision_cost(player: dict, players: list[dict]) -> float | None:
+    """How many points a start/sit call on `player` cost, or None if it cost
+    nothing that could have been fixed with an eligible swap.
+
+    Started: the best eligible bench player minus his score.
+    Benched: his score minus the worst eligible starter he could have replaced.
+    """
+    starters = [p for p in players if p.get("started")]
+    bench = [p for p in players if not p.get("started") and (p.get("slot") or "") != "IR"
+             and not p.get("on_bye") and p.get("points") is not None]
+    pts = player.get("points")
+    if pts is None:
+        return None
+    if player.get("started"):
+        rivals = [b["points"] for b in bench if player in _eligible_slots(b.get("position") or "", starters)]
+        return (max(rivals) - pts) if rivals else None
+    if (player.get("slot") or "") == "IR" or player.get("on_bye"):
+        return None
+    rivals = [o["points"] for o in _eligible_slots(player.get("position") or "", starters)
+              if o.get("points") is not None]
+    return (pts - min(rivals)) if rivals else None
+
+
+def lineup_reversal(current: list[dict], earlier: list[tuple[int, list[dict]]]) -> dict | None:
+    """The same player called wrong in opposite directions: benched the week
+    he went off, started the week he didn't (or the reverse). Both calls must
+    have cost at least BENCH_GAP and his own score must have swung by
+    REVERSAL_SWING, so it is a pattern, not noise.
+
+    `earlier` is [(week, players), ...]; the most recent qualifying week wins.
+    """
+    best = None
+    for p in current:
+        cost_now = _decision_cost(p, current)
+        if cost_now is None or cost_now < BENCH_GAP:
+            continue
+        for wk, players in sorted(earlier, key=lambda x: -x[0]):
+            then = next((q for q in players if q.get("name") == p.get("name")), None)
+            if not then or bool(then.get("started")) == bool(p.get("started")):
+                continue
+            cost_then = _decision_cost(then, players)
+            if cost_then is None or cost_then < BENCH_GAP:
+                continue
+            # The joke is "benched him when he went off, started him when he
+            # didn't". Without a real swing in his own score (10.5 then 15.1)
+            # it is just two ordinary bench gaps that share a name.
+            if abs((p.get("points") or 0) - (then.get("points") or 0)) < REVERSAL_SWING:
+                continue
+            total = cost_now + cost_then
+            # Weeks in between where he got the same call as now. Leaving them
+            # out let the writer say "finally trusted Coker" about a player
+            # who had also started the week before.
+            between = []
+            for w2, pl2 in sorted(earlier, key=lambda x: x[0]):
+                if w2 <= wk:
+                    continue
+                q = next((q for q in pl2 if q.get("name") == p.get("name")), None)
+                if q and bool(q.get("started")) == bool(p.get("started")) and q.get("points") is not None:
+                    between.append((w2, q["points"]))
+            if best is None or total > best[0]:
+                best = (total, p, then, wk, between)
+            break
+    if not best:
+        return None
+    _, now, then, wk, between = best
+    if now.get("started"):
+        text = (f"started {now['name']} this week for {_fmt(now['points'])} after benching him in "
+                f"week {wk}, when he scored {_fmt(then['points'])} -- wrong about him both times")
+        verb = "started"
+    else:
+        text = (f"benched {now['name']} this week while he scored {_fmt(now['points'])} after "
+                f"starting him in week {wk} for {_fmt(then['points'])} -- wrong about him both times")
+        verb = "benched"
+    if between:
+        text += f" (also {verb} him in " + ", ".join(
+            f"week {w2}, {_fmt(pts)}" for w2, pts in between) + ")"
+    return {"kind": "lineup_reversal", "weight": 10, "player": now["name"], "text": text}
+
+
+def lineup_occurrences(players: list[dict]) -> list[dict]:
+    """Occurrences visible only in a full lineup: the ones the manager caused.
+
+    This is the material that previously had to be typed into the context box
+    every week -- who was benched, who was started hurt, who was on a bye.
+    """
+    found = []
+    starters = [p for p in players if p.get("started")]
+    # Only BE can be swapped in; IR is not a choice the manager had.
+    bench = [p for p in players if not p.get("started") and (p.get("slot") or "") != "IR"]
+
+    best = None
+    for b in bench:
+        if b.get("points") is None or b.get("on_bye"):
+            continue
+        options = _eligible_slots(b.get("position") or "", starters)
+        options = [o for o in options if o.get("points") is not None]
+        if not options:
+            continue
+        worst = min(options, key=lambda o: o["points"])
+        gap = b["points"] - worst["points"]
+        if gap >= BENCH_GAP and (best is None or gap > best[0]):
+            best = (gap, worst, b)
+    no_show_named = None
+    if best:
+        gap, worst, b = best
+        # When the starter never took the field, say so in the same fact
+        # rather than spending a second of the team's three slots on it.
+        if worst.get("played") is False:
+            no_show_named = worst["name"]
+            started = f"started {worst['name']}, who didn't play and scored 0,"
+        else:
+            started = f"started {worst['name']} ({_fmt(worst['points'])})"
+        found.append({
+            "kind": "bench_disaster",
+            "weight": 10,
+            "gap": gap,
+            "players": (worst["name"], b["name"]),
+            "no_show": no_show_named,
+            "text": (
+                f"{started} over {b['name']} "
+                f"({_fmt(b['points'])}) on the bench -- {_fmt(gap)} points left there"
+            ),
+        })
+
+    # A started player with no stat line at all didn't take the field. That is
+    # a game-time fact. ESPN's injury status is not: it is reported as of today,
+    # so a Tuesday pull listed a QB who was hurt during the game as "on IR", and
+    # Lamar Jackson as on IR in a week he scored 30. Why a player sat isn't
+    # knowable from this data, so the text doesn't guess at it.
+    for s in starters:
+        if s.get("played") is False and not s.get("on_bye") and s["name"] != no_show_named:
+            found.append({
+                "kind": "started_did_not_play",
+                "weight": 9,
+                "text": f"started {s['name']}, who didn't play and scored 0",
+            })
+            break
+
+    for s in starters:
+        if s.get("on_bye"):
+            found.append({
+                "kind": "started_on_bye",
+                "weight": 9,
+                "text": f"started {s['name']}, who was on a bye week",
+            })
+            break
+
+    return found
 
 
 def _this_week_games(week_data):
@@ -62,9 +234,9 @@ def detect(league: dict, week: int, ranked: list[dict]) -> dict:
     by_name = {r["name"]: r for r in ranked}
     teams: dict[str, list[dict]] = {r["name"]: [] for r in ranked}
 
-    def add(name, kind, text, weight):
+    def add(name, kind, text, weight, **extra):
         if name in teams:
-            teams[name].append({"kind": kind, "text": text, "weight": weight})
+            teams[name].append({"kind": kind, "text": text, "weight": weight, **extra})
 
     scores = {n: g["own"] for n, g in games.items()}
     league_notes = []
@@ -108,12 +280,20 @@ def detect(league: dict, week: int, ranked: list[dict]) -> dict:
         # Projection gaps -- ESPN's own number, so this is factual, not invented.
         if g["proj"] is not None:
             gap = g["own"] - g["proj"]
+            # Say who was favored. Given only "projected 117, lost", the writer
+            # called an underdog "projected to cruise" -- a big-sounding number
+            # read as favoritism the matchup never had.
+            odds = ""
+            if g["opp_proj"] is not None and g["proj"] != g["opp_proj"]:
+                side = "favored" if g["proj"] > g["opp_proj"] else "the underdog"
+                odds = (f"; was {side} against {g['opponent']} going in "
+                        f"({_fmt(g['proj'])} to {_fmt(g['opp_proj'])})")
             if gap <= -PROJECTION_GAP:
                 add(name, "under_projection",
-                    f"projected {_fmt(g['proj'])} but scored {_fmt(g['own'])} -- {_fmt(abs(gap))} under", 8)
+                    f"projected {_fmt(g['proj'])} but scored {_fmt(g['own'])} -- {_fmt(abs(gap))} under{odds}", 8)
             elif gap >= PROJECTION_GAP:
                 add(name, "over_projection",
-                    f"projected {_fmt(g['proj'])} but scored {_fmt(g['own'])} -- {_fmt(gap)} over", 7)
+                    f"projected {_fmt(g['proj'])} but scored {_fmt(g['own'])} -- {_fmt(gap)} over{odds}", 7)
             if g["opp_proj"] is not None and not g["won"] and g["proj"] > g["opp_proj"]:
                 add(name, "lost_as_favorite",
                     f"was projected to outscore {g['opponent']} "
@@ -166,6 +346,111 @@ def detect(league: dict, week: int, ranked: list[dict]) -> dict:
                 add(name, "playoff_swing",
                     f"playoff odds {direction} from {_fmt(prev_pct)}% to {_fmt(pct)}%", 8)
 
+    # Lineup-level occurrences, when the week came from the API. The screenshot
+    # path has no player data, so this simply contributes nothing there.
+    for entry in week_data.get("lineups") or []:
+        name = entry.get("team")
+        if name not in teams:
+            continue
+        players = entry.get("players") or []
+        for occ in lineup_occurrences(players):
+            add(name, occ["kind"], occ["text"], occ["weight"],
+                **{k: v for k, v in occ.items() if k not in ("kind", "text", "weight")})
+        rev = lineup_reversal(players, _earlier_lineups(league, week, name))
+        if rev:
+            # The reversal is the better telling of a bench gap on the same
+            # player this week, so it replaces that one rather than doubling up.
+            replaced = [o for o in teams[name]
+                        if o["kind"] == "bench_disaster" and rev["player"] in o.get("players", ())]
+            teams[name] = [o for o in teams[name] if o not in replaced]
+            add(name, rev["kind"], rev["text"], rev["weight"], player=rev["player"])
+            # A no-show folded into the replaced fact is still its own fact.
+            for o in replaced:
+                if o.get("no_show"):
+                    add(name, "started_did_not_play",
+                        f"started {o['no_show']}, who didn't play and scored 0", 9)
+
+    # League-wide extremes, computed rather than left to the writer. Shown only
+    # each team's own facts, it called a 32.8-point projection miss "the worst
+    # of the week" when another team missed by 44.9, and a 21.04 bench gap "the
+    # biggest" when another was 21.8. A superlative is only safe if it is
+    # stated here, so these are named in the league section and on the
+    # leader's own fact. A tie at the top gets no superlative at all.
+    def crown(values: dict, kind: str, label: str, describe):
+        if not values:
+            return
+        ordered = sorted(values.items(), key=lambda kv: -kv[1])
+        if len(ordered) > 1 and ordered[0][1] == ordered[1][1]:
+            return
+        leader, _ = ordered[0]
+        league_notes.append({"kind": kind, "weight": 5,
+                             "text": f"{label}: {leader}, {describe(leader)}"})
+        for o in teams.get(leader, []):
+            if o["kind"] == kind:
+                o["text"] += f" -- the {label} in the league this week"
+
+    misses, beats = {}, {}
+    for name, g in games.items():
+        if name in teams and g["proj"] is not None:
+            gap = g["own"] - g["proj"]
+            if gap <= -PROJECTION_GAP:
+                misses[name] = -gap
+            elif gap >= PROJECTION_GAP:
+                beats[name] = gap
+    crown(misses, "under_projection", "biggest miss of projection",
+          lambda n: f"{_fmt(misses[n])} under")
+    crown(beats, "over_projection", "biggest beat of projection",
+          lambda n: f"{_fmt(beats[n])} over")
+    bench_gaps = {n: o["gap"] for n, occ in teams.items() for o in occ
+                  if o["kind"] == "bench_disaster" and "gap" in o}
+    crown(bench_gaps, "bench_disaster", "biggest bench gap",
+          lambda n: f"{_fmt(bench_gaps[n])} points left on the bench")
+
+    # A 10-point bench gap is ordinary in a 12-team league -- most rosters
+    # leave that much most weeks -- so reporting every one put a bench line in
+    # 8 of 12 writeups by week 3 (the user's own columns: 2% of paragraphs).
+    # Keep the ones that are a story: the gap would have flipped a loss, it is
+    # big in absolute terms, or it is the league's biggest. Each kept fact
+    # also says whether it changed the result, so the writer doesn't have to
+    # work that out.
+    for name in teams:
+        g = games.get(name)
+        kept = []
+        for o in teams[name]:
+            if o["kind"] == "bench_disaster" and "gap" in o:
+                lost = g is not None and not g["won"]
+                flipped = lost and o["gap"] > abs(g["margin"])
+                leader = "the biggest bench gap" in o["text"]
+                if not (flipped or o["gap"] >= BIG_BENCH_GAP or leader):
+                    continue
+                if lost:
+                    o["text"] += (" -- enough to have won the game" if flipped
+                                  else " -- would still have lost")
+                    if flipped:
+                        o["weight"] = 11
+            kept.append(o)
+        teams[name] = kept
+
+    # The column gets at most MAX_BENCH_LINES_PER_WEEK lineup-decision lines in
+    # total. Priority: a call that cost the game, then the same player called
+    # wrong both ways, then the size of the gap.
+    bench_kinds = ("bench_disaster", "lineup_reversal")
+    ranked_bench = sorted(
+        ((name, o) for name, occ in teams.items() for o in occ if o["kind"] in bench_kinds),
+        key=lambda no: (
+            "enough to have won" not in no[1]["text"],
+            no[1]["kind"] != "lineup_reversal",
+            -no[1].get("gap", 0),
+        ),
+    )
+    dropped = {id(o) for _, o in ranked_bench[MAX_BENCH_LINES_PER_WEEK:]}
+    for name in teams:
+        teams[name] = [o for o in teams[name] if id(o) not in dropped]
+    # If the league's biggest gap lost its slot, don't advertise it either --
+    # the league note alone would put a fourth bench line in the column.
+    if not any("the biggest bench gap" in o["text"] for occ in teams.values() for o in occ):
+        league_notes[:] = [n for n in league_notes if n["kind"] != "bench_disaster"]
+
     # Keep only the strongest few. Thresholds were set in week 4 with four games
     # of history; by week 6 streaks, rank movement and high/low water marks have
     # all unlocked, so a team can accumulate five "notable" items and earn a
@@ -176,6 +461,20 @@ def detect(league: dict, week: int, ranked: list[dict]) -> dict:
         del teams[name][MAX_OCCURRENCES_PER_TEAM:]
 
     return {"teams": teams, "league": league_notes}
+
+
+def _earlier_lineups(league: dict, week: int, name: str) -> list[tuple[int, list[dict]]]:
+    """This team's stored lineups from earlier weeks, matched across renames
+    and stray whitespace in how ESPN spelled the name at the time."""
+    variants = {v.strip() for v in memory.name_variants(league, name)}
+    out = []
+    for k, wd in (league.get("weeks") or {}).items():
+        if int(k) >= week:
+            continue
+        for entry in wd.get("lineups") or []:
+            if (entry.get("team") or "").strip() in variants:
+                out.append((int(k), entry.get("players") or []))
+    return out
 
 
 def _streak_tuple(streak):

@@ -61,10 +61,10 @@ def test_relevant_storylines_sorted_most_recent_first_and_limited():
 
 def test_apply_storyline_updates_creates_new_storyline():
     league = {}
-    updates = [{"storyline_id": None, "title": "Doctor's Orders collapse", "teams": ["Charles"], "event_description": "Scored 49.86", "status": "ongoing"}]
+    updates = [{"storyline_id": None, "title": "Gridiron Gang collapse", "teams": ["Sam"], "event_description": "Scored 49.86", "status": "ongoing"}]
     narratives.apply_storyline_updates(league, 12, updates)
     assert len(league["storylines"]) == 1
-    assert league["storylines"][0]["title"] == "Doctor's Orders collapse"
+    assert league["storylines"][0]["title"] == "Gridiron Gang collapse"
 
 
 def test_apply_storyline_updates_appends_to_existing_by_id():

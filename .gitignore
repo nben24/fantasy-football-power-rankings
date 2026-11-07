@@ -14,3 +14,6 @@ data/
 # Your own reference columns. The committed template is *.example.md;
 # the working copy stays local because it holds real names.
 reference/my_columns.md
+
+# Run logs from the scheduled job
+logs/

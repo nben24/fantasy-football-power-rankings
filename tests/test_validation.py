@@ -56,20 +56,20 @@ def test_normalize_fuzzy_matches_existing_team_name():
 
 def test_normalize_matches_espn_ellipsis_truncation():
     """Real bug: ESPN truncates long team names with '...' in some screenshot
-    crops but not others. 'EL SUCIO DE LOS...' vs 'EL SUCIO DE LOS SUCIOS' has
+    crops but not others. 'LA FURIA DE LOS...' vs 'LA FURIA DE LOS LOBOS' has
     a fuzzy-match ratio of only 0.75 (below the 0.82 cutoff), so without this
     check it gets treated as a brand-new team -- silently resetting rank
     history and producing false claims like 'first time at #1 all season.'
     Canonicalizes to the ALREADY-established name so prior weeks' stored data
     (which used the truncated form) keeps matching by exact string."""
-    league = {"team_aliases": {}, "weeks": {"9": {"teams": [{"name": "EL SUCIO DE LOS..."}]}}}
-    normalized = memory.normalize_team_name(league, "EL SUCIO DE LOS SUCIOS")
-    assert normalized == "EL SUCIO DE LOS..."
+    league = {"team_aliases": {}, "weeks": {"9": {"teams": [{"name": "LA FURIA DE LOS..."}]}}}
+    normalized = memory.normalize_team_name(league, "LA FURIA DE LOS LOBOS")
+    assert normalized == "LA FURIA DE LOS..."
 
     # And the reverse direction: full name seen first, truncated version later.
-    league2 = {"team_aliases": {}, "weeks": {"9": {"teams": [{"name": "EL SUCIO DE LOS SUCIOS"}]}}}
-    normalized2 = memory.normalize_team_name(league2, "EL SUCIO DE LOS...")
-    assert normalized2 == "EL SUCIO DE LOS SUCIOS"
+    league2 = {"team_aliases": {}, "weeks": {"9": {"teams": [{"name": "LA FURIA DE LOS LOBOS"}]}}}
+    normalized2 = memory.normalize_team_name(league2, "LA FURIA DE LOS...")
+    assert normalized2 == "LA FURIA DE LOS LOBOS"
 
 
 def test_normalize_ellipsis_truncation_requires_real_ellipsis_marker():

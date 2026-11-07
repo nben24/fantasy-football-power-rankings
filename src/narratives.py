@@ -12,13 +12,10 @@ weeks have targeted ammunition instead of a wall of past writeups.
 """
 
 import json
-import os
 import re
-import anthropic
 
-from src import memory, occurrences, prompts
+from src import llm, memory, occurrences, prompts
 
-MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-5")
 
 SEASON_TRAJECTORY_WEEKS = 6  # how many past weeks of rank/record to summarize per team
 STORYLINES_PER_TEAM = 3  # how many active storylines to surface per team as ammunition
@@ -420,20 +417,32 @@ def sanitize_model_output(obj):
     return obj
 
 
+#: Cache telemetry from the most recent generation, surfaced in the UI so a
+#: silent cache miss is visible rather than quietly costing full price.
+LAST_USAGE: list[dict] = []
+
+
+def reset_usage() -> None:
+    """Call before a generation so the telemetry covers that run only."""
+    LAST_USAGE.clear()
+
+
+def cache_summary(usage: list[dict] | None = None) -> dict:
+    """Totals across the calls in one generation."""
+    rows = LAST_USAGE if usage is None else usage
+    return {
+        "calls": len(rows),
+        "input": sum(r.get("input", 0) for r in rows),
+        "cache_read": sum(r.get("cache_read", 0) for r in rows),
+        "cache_write": sum(r.get("cache_write", 0) for r in rows),
+        "output": sum(r.get("output", 0) for r in rows),
+    }
+
+
 def _call_forced_tool(system: str, user_content: str, tool: dict) -> dict:
-    client = anthropic.Anthropic()
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=8000,
-        system=system,
-        tools=[tool],
-        tool_choice={"type": "tool", "name": tool["name"]},
-        messages=[{"role": "user", "content": user_content}],
+    return sanitize_model_output(
+        llm.call_tool(system, user_content, tool, usage_log=LAST_USAGE)
     )
-    for block in response.content:
-        if block.type == "tool_use":
-            return sanitize_model_output(block.input)
-    raise RuntimeError("Model did not return structured output.")
 
 
 def find_comedic_angles(league: dict, week: int, rankings: list[dict], context_text: str) -> dict:
@@ -619,6 +628,9 @@ _CONSTRUCTION_FAMILIES = {
     "at this point": (r"\bat this point\b", 1),
     "opens on 'You'": (r"^\s*You\b", 3),
     "simile template (like a/an ...)": (r"\blike (?:a|an|the)\b", 6),
+    # Not a corpus percentile: the user's own ceiling. Lineup data made a
+    # bench line the default joke (8 of 12 in one week); at most 3 a column.
+    "bench line": (r"\bbench(?:ed|ing)?\b", 3),
 }
 
 
@@ -709,11 +721,57 @@ def _normalize_tiers(writeups: dict, rankings: list[dict]) -> dict:
     return writeups
 
 
+def previous_tier_names(league: dict, week: int) -> list[str]:
+    """Tier names from the most recent written week before `week`."""
+    earlier = sorted((int(k) for k, v in (league.get("weeks") or {}).items()
+                      if int(k) < week and (v.get("writeups") or {}).get("tiers")), reverse=True)
+    if not earlier:
+        return []
+    tiers = league["weeks"][str(earlier[0])]["writeups"]["tiers"]
+    return [t["tier_name"].strip() for t in tiers if (t.get("tier_name") or "").strip()]
+
+
+def previous_themes(league: dict, week: int) -> list[str]:
+    """Headlines this league has already run, oldest first."""
+    weeks = sorted(int(k) for k in (league.get("weeks") or {}) if int(k) < week)
+    out = []
+    for k in weeks:
+        theme = ((league["weeks"][str(k)].get("writeups") or {}).get("week_theme") or "").strip()
+        if theme:
+            out.append(f"week {k}: {theme}")
+    return out
+
+
+def _previous_themes_block(league: dict, week: int) -> str:
+    # Weeks 2 and 3 of the test league ran "Projections Are Fan Fiction" and
+    # "Projections Are Fan Fiction Now": the writer had no idea what last
+    # week's headline was. Shown as data, the same way tier names are.
+    themes = previous_themes(league, week)
+    if not themes:
+        return ""
+    return ("\n\nHEADLINES THIS LEAGUE HAS ALREADY RUN -- this week's is about something "
+            "else:\n  " + "; ".join(themes))
+
+
 def generate_writeups(league: dict, week: int, rankings: list[dict], context_text: str, angles: list[dict]) -> dict:
     facts = build_facts_bundle(league, week, rankings, context_text)
     user_content = facts + "\n\n" + _format_angles(angles)
 
     taken = memory.tier_names_in_other_leagues(league["id"])
+    # A name another league is using can't also be kept here; that rule wins.
+    previous = [n for n in previous_tier_names(league, week) if n not in taken]
+    if previous:
+        # The prompt asks for tier names that stay recognizable within a
+        # league, but the writer was never shown last week's, so every week
+        # renamed all four. Names only: subtitles are meant to rotate, and
+        # showing them invites reuse.
+        user_content += (
+            "\n\nLAST WEEK'S TIER NAMES IN THIS LEAGUE, top to bottom -- keep the ones that "
+            "still fit the teams in them, with fresh subtitles:\n  " + "; ".join(previous)
+        )
+
+    user_content += _previous_themes_block(league, week)
+
     if taken:
         user_content += (
             "\n\nTIER NAMES ALREADY IN USE BY THIS USER'S OTHER LEAGUES -- pick different ones, "
@@ -725,7 +783,7 @@ def generate_writeups(league: dict, week: int, rankings: list[dict], context_tex
         + "\n"
         + prompts.CRITICAL_RULES
         + "\n\nWrite one entry in team_writeups for every team listed below, built around its "
-        "selected comedic angle. Group them into tiers you invent for this week, and give the "
+        "selected comedic angle. Group them into tiers, and give the "
         "week a theme. Use the record_power_rankings_writeup tool."
     )
     draft = _call_forced_tool(system, user_content, WRITEUP_TOOL)
@@ -787,6 +845,7 @@ def regenerate_awards_and_recap(
         "that complement them without repeating their jokes:\n"
         + written
     )
+    user_content += _previous_themes_block(league, week)
     if feedback:
         user_content += f"\n\nUSER FEEDBACK to address directly: {feedback}"
 

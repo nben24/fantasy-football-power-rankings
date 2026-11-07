@@ -67,6 +67,12 @@ def normalize_extracted_data(league: dict, extracted: dict) -> dict:
     for r in extracted.get("rosters", []) or []:
         r["team"] = memory.normalize_team_name(league, r["team"])
 
+    # Lineups name their team too. Left out of this step, a team ESPN returns
+    # as "Gridiron Gang " (trailing space) matched nothing downstream, and
+    # every bench decision and no-show for it was dropped without a trace.
+    for entry in extracted.get("lineups", []) or []:
+        entry["team"] = memory.normalize_team_name(league, entry["team"])
+
     return extracted
 
 
@@ -95,6 +101,13 @@ def validate_extracted_data(extracted: dict) -> list[str]:
         score_a, score_b = m.get("score_a"), m.get("score_b")
         if score_a is not None and score_b is not None and score_a == score_b:
             warnings.append(f"'{m['team_a']}' vs '{m['team_b']}' is an exact tie ({score_a}) -- double-check this score.")
+
+    for entry in extracted.get("lineups", []) or []:
+        if known_names and entry.get("team") not in known_names:
+            warnings.append(
+                f"Lineup for '{entry.get('team')}' doesn't match any team in the standings -- "
+                "its bench and lineup facts would be ignored."
+            )
 
     for m in matchups:
         if m.get("score_a") is None or m.get("score_b") is None:

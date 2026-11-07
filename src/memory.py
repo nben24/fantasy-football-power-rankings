@@ -165,8 +165,8 @@ def name_variants(league: dict, name: str) -> set[str]:
     """Every label this team has gone by, including its current one.
 
     A manager renaming their team mid-season produces a string that matches
-    nothing: fuzzy matching can't connect "LeanISLaw" to
-    "GetExcitedForGoyBallYouSlaves". Without this the team reads as brand new --
+    nothing: fuzzy matching can't connect "WaiverWireWizards" to
+    "FourthAndLongForever". Without this the team reads as brand new --
     no previous rank, recent form computed from a single game, and six weeks of
     history stranded under the old label."""
     variants = {name}
@@ -224,8 +224,8 @@ def normalize_team_name(league: dict, raw_name: str) -> str:
             return match[0]
 
         # ESPN truncates long team names with a literal "..." in some screenshot
-        # crops but not others (e.g. "EL SUCIO DE LOS..." vs "EL SUCIO DE LOS
-        # SUCIOS"). That structural difference drops the fuzzy-match ratio below
+        # crops but not others (e.g. "LA FURIA DE LOS..." vs "LA FURIA DE LOS
+        # LOBOS"). That structural difference drops the fuzzy-match ratio below
         # the normal threshold even though it's obviously the same team, so this
         # is checked explicitly rather than by loosening the fuzzy cutoff (which
         # would risk merging genuinely different teams). Canonicalize to

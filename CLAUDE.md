@@ -80,6 +80,16 @@ Each of these was learned from a real failure. Please don't quietly revert them.
    `cap_fraud_lens_angles`, `profile_writeups`. Prefer a deterministic guard over another
    paragraph of instructions — but only after observing the failure, not preemptively.
 
+9. **Every model call goes through `src/llm.call_tool`.** Never pass a forced `tool_choice`
+   (`{"type": "tool"}` / `{"type": "any"}`): `claude-opus-5-5` rejects it with a 400. The
+   helper asks for the call in the prompt, sends the schema with `strict: true` (so every
+   object needs `additionalProperties: false`, which it adds), and retries once if no call
+   comes back. Schemas can't use numeric or length constraints under strict mode.
+
+10. **Key every league-specific widget with the league id.** A widget's value outlives a league
+    switch, so a shared key showed one league's ESPN id and notes under another — and Save
+    would have written them there. The selected league lives in `?league=` so a refresh keeps it.
+
 ## Accuracy: reconciliation
 
 `data_validation.reconcile_week` proves extracted numbers against the previous week rather than
