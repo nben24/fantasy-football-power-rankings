@@ -167,3 +167,62 @@ def test_week_data_carries_lineups_and_source(tmp_path, monkeypatch):
     saved = memory.get_week(memory.load_league("sched"), 8)
     assert "lineups" in saved
     assert saved.get("source") == "espn_api"
+
+
+# --- which week, and whether it's done ---------------------------------------
+
+class _Team:
+    def __init__(self, outcomes):
+        self.outcomes = outcomes
+
+
+class FinalClient(FakeClient):
+    def __init__(self, current_week, outcomes):
+        super().__init__(current_week)
+        self.teams = [_Team(o) for o in outcomes]
+
+
+def test_target_is_the_next_unwritten_week_not_espns_rollover():
+    """Run before ESPN rolls over, current_week-1 pointed at last week, found it
+    written, and did nothing."""
+    lg = {"weeks": {"7": {"writeups": {"x": 1}}, "8": {"writeups": {"x": 1}}, "9": {"teams": []}}}
+    assert weekly_run.target_week(FakeClient(current_week=9), lg) == 9
+
+
+def test_a_week_with_undecided_games_is_not_final():
+    c = FinalClient(9, [["W"] * 8 + ["U"], ["L"] * 8 + ["W"]])
+    assert weekly_run.week_is_final(c, 9) is False
+    c = FinalClient(9, [["W"] * 8 + ["L"], ["L"] * 8 + ["W"]])
+    assert weekly_run.week_is_final(c, 9) is True
+    assert weekly_run.week_is_final(FakeClient(current_week=10), 9) is True
+
+
+def test_an_unfinished_week_waits_and_spends_nothing(tmp_path, monkeypatch):
+    lg = _league(tmp_path)
+    lg["weeks"]["8"]["writeups"] = {"team_writeups": []}
+    memory.save_league(lg)
+    calls = _patch(monkeypatch, lg)
+    monkeypatch.setattr(weekly_run.espn_sync, "connect",
+                        lambda *a, **k: FinalClient(9, [["W"] * 8 + ["U"]]))
+    r = weekly_run.run_league("sched")
+    assert r.status == "waiting" and r.week == 9 and r.ok
+    assert calls["n"] == 0
+
+
+def test_a_league_with_automatic_runs_off_is_skipped_by_the_schedule(tmp_path, monkeypatch):
+    lg = _league(tmp_path)
+    lg["auto_weekly"] = False
+    memory.save_league(lg)
+    calls = _patch(monkeypatch, lg)
+    r = weekly_run.run_all()[0]
+    assert r.status == "skipped" and "off" in r.detail
+    assert calls["n"] == 0
+    # ...but can still be run by hand.
+    assert weekly_run.run_league("sched", week=8).status == "generated"
+
+
+def test_notification_only_when_something_happened():
+    R = weekly_run.LeagueResult
+    assert weekly_run.notification_text([R("a", "A", 9, "skipped"), R("b", "B", 9, "waiting")]) is None
+    text = weekly_run.notification_text([R("a", "A", 9, "generated"), R("b", "B", 9, "blocked")])
+    assert "Ready: A W9" in text and "Needs a look: B" in text

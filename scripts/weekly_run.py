@@ -37,6 +37,8 @@ def main() -> int:
                     help="force a week instead of using the most recently completed one")
     ap.add_argument("--league", default=None, help="run a single league by id")
     ap.add_argument("--quiet", action="store_true", help="only print the summary")
+    ap.add_argument("--notify", action="store_true",
+                    help="show a macOS notification when a column is ready or a league needs a look")
     args = ap.parse_args()
 
     log_dir = ROOT / "logs"
@@ -63,9 +65,21 @@ def main() -> int:
     summary = weekly_run.summarize(results)
     print()
     print(summary)
+    if args.notify:
+        _notify(weekly_run.notification_text(results))
     log.info("finished in %.1fs", (datetime.now() - started).total_seconds())
 
     return 0 if all(r.ok or r.status == "pulled" for r in results) else 1
+
+
+def _notify(text):
+    if not text:
+        return
+    import subprocess
+    safe = text.replace("\\", "").replace('"', "'")
+    subprocess.run(["osascript", "-e",
+                    f'display notification "{safe}" with title "Power rankings" sound name "Glass"'],
+                   check=False)
 
 
 if __name__ == "__main__":

@@ -32,34 +32,61 @@ class LeagueResult:
     league_id: str
     league_name: str
     week: int | None = None
-    status: str = "pending"  # pulled | generated | skipped | blocked | failed
+    status: str = "pending"  # pulled | generated | skipped | waiting | blocked | failed
     detail: str = ""
     reconciliation: tuple[int, int, int] | None = None
     profile: dict = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
-        return self.status in ("generated", "skipped")
+        # "waiting" is normal at 9am if ESPN hasn't finalised the week yet;
+        # the next scheduled attempt picks it up.
+        return self.status in ("generated", "skipped", "waiting")
 
     def line(self) -> str:
         icon = {
-            "generated": "✅", "pulled": "◦", "skipped": "·",
+            "generated": "✅", "pulled": "◦", "skipped": "·", "waiting": "…",
             "blocked": "⚠️", "failed": "❌",
         }.get(self.status, "?")
         wk = f"W{self.week}" if self.week else "--"
         return f"{icon} {self.league_name[:24]:<26}{wk:<5}{self.status:<10}{self.detail}"
 
 
-def target_week(league_client) -> int:
-    """The most recently completed week.
+def target_week(league_client, league: dict | None = None) -> int:
+    """The week to write: the league's next unwritten one.
 
-    ESPN's current_week points at the upcoming week once a slate finishes, so
-    the week worth writing about is the one before it.
+    This used to be "ESPN's current_week minus one", which depends on when
+    ESPN rolls the week over. Run before the rollover, it pointed at last
+    week, found it already written, and quietly did nothing. A league with no
+    written weeks yet falls back to that rule.
     """
+    written = [int(k) for k, v in ((league or {}).get("weeks") or {}).items() if v.get("writeups")]
+    if written:
+        return max(written) + 1
     return max(1, int(league_client.current_week) - 1)
 
 
-def run_league(league_id: str, dry_run: bool = False, week: int | None = None) -> LeagueResult:
+def week_is_final(league_client, week: int) -> bool:
+    """True once every matchup in `week` has a result.
+
+    ESPN keeps a team's outcome for a week as "U" (undecided) until it is
+    final. A week before current_week is final regardless, which also covers
+    playoff weeks where eliminated teams never get an outcome.
+    """
+    if week < int(league_client.current_week):
+        return True
+    teams = getattr(league_client, "teams", None) or []
+    if not teams:
+        return False
+    for t in teams:
+        outcomes = getattr(t, "outcomes", None) or []
+        if len(outcomes) < week or outcomes[week - 1] not in ("W", "L", "T"):
+            return False
+    return True
+
+
+def run_league(league_id: str, dry_run: bool = False, week: int | None = None,
+               scheduled: bool = False) -> LeagueResult:
     league = memory.load_league(league_id)
     if league is None:
         return LeagueResult(league_id, league_id, status="failed", detail="league not found")
@@ -70,12 +97,20 @@ def run_league(league_id: str, dry_run: bool = False, week: int | None = None) -
         result.status = "skipped"
         result.detail = "no ESPN league id configured"
         return result
+    if scheduled and league.get("auto_weekly") is False:
+        result.status = "skipped"
+        result.detail = "automatic Tuesday runs are off for this league"
+        return result
 
     try:
         season = int(league.get("espn_season") or datetime.now().year)
         client = espn_sync.connect(int(espn_id), season)
-        wk = int(week) if week else target_week(client)
+        wk = int(week) if week else target_week(client, league)
         result.week = wk
+        if not week and not week_is_final(client, wk):
+            result.status = "waiting"
+            result.detail = f"week {wk} isn't final on ESPN yet"
+            return result
 
         existing = memory.get_week(league, wk) or {}
         if existing.get("writeups"):
@@ -143,11 +178,25 @@ def run_league(league_id: str, dry_run: bool = False, week: int | None = None) -
 
 
 def run_all(dry_run: bool = False, week: int | None = None) -> list[LeagueResult]:
-    """Every league that has an ESPN id configured, each isolated from the others."""
+    """Every league with an ESPN id and automatic runs on, each isolated from the others."""
     results = []
     for entry in memory.list_leagues():
-        results.append(run_league(entry["id"], dry_run=dry_run, week=week))
+        results.append(run_league(entry["id"], dry_run=dry_run, week=week, scheduled=True))
     return results
+
+
+def notification_text(results: list[LeagueResult]) -> str | None:
+    """One line for a desktop notification, or None if there's nothing new."""
+    done = [r for r in results if r.status == "generated"]
+    bad = [r for r in results if r.status in ("blocked", "failed")]
+    if not done and not bad:
+        return None
+    parts = []
+    if done:
+        parts.append("Ready: " + ", ".join(f"{r.league_name} W{r.week}" for r in done))
+    if bad:
+        parts.append("Needs a look: " + ", ".join(r.league_name for r in bad))
+    return ". ".join(parts)
 
 
 def summarize(results: list[LeagueResult]) -> str:

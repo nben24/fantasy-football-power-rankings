@@ -243,25 +243,53 @@ python scripts/weekly_run.py --week 9      # force a week
 python scripts/weekly_run.py --league id   # one league only
 ```
 
-It targets the most recently completed week (ESPN rolls `current_week` forward once a slate
-ends). Behaviour is deliberately conservative, since nothing is watching when it runs:
+It writes each league's next unwritten week, and only once ESPN shows every game in it as
+final. It does not rely on when ESPN rolls `current_week` over, which used to make a run that came
+too early silently skip. Behaviour is deliberately conservative, since nothing is watching when it
+runs:
 
 - **A week that already has writeups is never regenerated**, so re-running is free and safe.
+- **A week that isn't final yet waits** and is picked up by the next run.
 - **A reconciliation failure blocks generation.** The pulled data is saved for review, but no
   column is written. A late column is recoverable; a wrong one is not.
 - **Leagues are independent.** A dead cookie on one does not stop the others.
+- **Per-league opt-out.** Untick "Write this league automatically on Tuesday mornings" in a
+  league's ESPN settings (for test leagues); `--league id` still runs it by hand.
 
-Exit codes: `0` all generated or skipped, `1` something needs attention, `2` credentials missing.
+`--notify` shows a macOS notification when a column is ready or a league needs a look. Exit codes:
+`0` all generated, skipped or waiting, `1` something needs attention, `2` credentials missing.
 Output goes to stdout and `logs/weekly_run.log`.
 
-To schedule it on macOS, `crontab -e` and add a Tuesday-morning entry using absolute paths:
+To schedule it on macOS, use a launchd agent rather than cron: launchd runs a missed job when the
+Mac wakes, where cron skips it. Save as `~/Library/LaunchAgents/com.fantasy-power-rankings.weekly.plist`,
+with your own path, then `launchctl bootstrap gui/$(id -u) <that file>`:
 
-```
-0 9 * * 2 cd /path/to/fantasy-football-power-rankings && .venv/bin/python scripts/weekly_run.py >> logs/cron.log 2>&1
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.fantasy-power-rankings.weekly</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string><string>-c</string>
+    <string>cd "/path/to/fantasy-football-power-rankings" &amp;&amp; exec .venv/bin/python scripts/weekly_run.py --notify --quiet</string>
+  </array>
+  <key>StandardOutPath</key><string>/Users/you/Library/Logs/fantasy-power-rankings.log</string>
+  <key>StandardErrorPath</key><string>/Users/you/Library/Logs/fantasy-power-rankings.log</string>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
+  </array>
+</dict>
+</plist>
 ```
 
-Pick the time after your league finalises — ESPN stat corrections land Tuesday and Wednesday, and
-pulling too early risks numbers that change after you have posted.
+The 10 and 11 o'clock entries are free retries in case ESPN hasn't finalised the week by 9. Keep
+the log paths outside `~/Documents`: launchd refuses to open them there and the job exits with
+code 78 before Python starts.
 
 ## Tests
 
@@ -271,7 +299,7 @@ pip install -r requirements-dev.txt
 python -m pytest tests/ -q
 ```
 
-**180 tests, running in roughly one second.** The suite uses hand-built fixtures exclusively — no
+**185 tests, running in roughly one second.** The suite uses hand-built fixtures exclusively — no
 screenshots, no API calls, no cost — and covers the ranking mathematics, team-name normalization
 and alias resolution, storyline lifecycle, occurrence detection, week-over-week reconciliation
 (including deliberately corrupted inputs to confirm the checks actually fail), output

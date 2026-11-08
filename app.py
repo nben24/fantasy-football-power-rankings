@@ -424,6 +424,12 @@ with tab_week:
                 "Season", min_value=2019, max_value=2100,
                 value=int(league.get("espn_season") or datetime.now().year),
             )
+            auto = st.checkbox(
+                "Write this league automatically on Tuesday mornings",
+                value=league.get("auto_weekly") is not False,
+                help="The scheduled run pulls and writes the column so it's waiting when you "
+                     "open the app. Turn off for test leagues.",
+            )
             b1, b2 = st.columns(2)
             save = b1.form_submit_button("Save" if connected else "Connect", type="primary")
             disconnect = connected and b2.form_submit_button("Disconnect")
@@ -434,6 +440,7 @@ with tab_week:
             else:
                 league["espn_league_id"] = cleaned or None
                 league["espn_season"] = int(espn_year)
+                league["auto_weekly"] = bool(auto)
                 memory.save_league(league)
                 st.toast("ESPN settings saved.")
                 st.rerun()
