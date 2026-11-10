@@ -114,13 +114,20 @@ def test_played_and_scored_zero_is_not_a_no_show():
 def test_no_stat_line_is_reportable():
     found = occurrences.lineup_occurrences([p("Ghost", "RB", "RB", 0.0, played=False)])
     assert [o["kind"] for o in found] == ["started_did_not_play"]
-    assert "didn't play" in found[0]["text"]
+    assert "no stats recorded" in found[0]["text"]
 
 
 def test_the_text_never_guesses_why():
     text = occurrences.lineup_occurrences([p("Ghost", "RB", "RB", 0.0, played=False)])[0]["text"]
     for word in ("injur", "IR", "out", "reserve", "suspend"):
         assert word not in text
+
+
+def test_the_text_does_not_claim_he_never_played():
+    """Ladd McConkey got hurt during the game with no stats recorded; the fact
+    said "didn't play" and the column called him inactive."""
+    text = occurrences.lineup_occurrences([p("Ghost", "RB", "RB", 0.0, played=False)])[0]["text"]
+    assert "didn't play" not in text and "can't say" in text
 
 
 def test_unknown_participation_is_not_reported():
@@ -158,7 +165,7 @@ def test_a_no_show_with_a_better_bench_option_is_one_fact():
         p("Waddle", "WR", "BE", 21.8),
     ])
     assert [o["kind"] for o in found] == ["bench_disaster"]
-    assert "didn't play" in found[0]["text"] and "Waddle" in found[0]["text"]
+    assert "no stats recorded" in found[0]["text"] and "Waddle" in found[0]["text"]
 
 
 # --- the same player called wrong both ways ---------------------------------

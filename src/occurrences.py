@@ -80,6 +80,14 @@ def _decision_cost(player: dict, players: list[dict]) -> float | None:
     return (pts - min(rivals)) if rivals else None
 
 
+# What an empty stat line means. "Didn't play" was itself a guess: a receiver
+# hurt on the opening drive also has no stat line, and the writer turned "didn't
+# play" into "inactive" for one who got hurt in the game. Say only what the data
+# knows, and say out loud that the reason isn't known so nothing fills the gap.
+NO_STAT_LINE = ("scored 0 with no stats recorded -- the data can't say whether he "
+                "got hurt early, was inactive or just never touched the ball")
+
+
 def lineup_reversal(current: list[dict], earlier: list[tuple[int, list[dict]]]) -> dict | None:
     """The same player called wrong in opposite directions: benched the week
     he went off, started the week he didn't (or the reverse). Both calls must
@@ -166,7 +174,7 @@ def lineup_occurrences(players: list[dict]) -> list[dict]:
         # rather than spending a second of the team's three slots on it.
         if worst.get("played") is False:
             no_show_named = worst["name"]
-            started = f"started {worst['name']}, who didn't play and scored 0,"
+            started = f"started {worst['name']}, who {NO_STAT_LINE},"
         else:
             started = f"started {worst['name']} ({_fmt(worst['points'])})"
         found.append({
@@ -191,7 +199,7 @@ def lineup_occurrences(players: list[dict]) -> list[dict]:
             found.append({
                 "kind": "started_did_not_play",
                 "weight": 9,
-                "text": f"started {s['name']}, who didn't play and scored 0",
+                "text": f"started {s['name']}, who {NO_STAT_LINE}",
             })
             break
 
@@ -368,7 +376,7 @@ def detect(league: dict, week: int, ranked: list[dict]) -> dict:
             for o in replaced:
                 if o.get("no_show"):
                     add(name, "started_did_not_play",
-                        f"started {o['no_show']}, who didn't play and scored 0", 9)
+                        f"started {o['no_show']}, who {NO_STAT_LINE}", 9)
 
     # League-wide extremes, computed rather than left to the writer. Shown only
     # each team's own facts, it called a 32.8-point projection miss "the worst
