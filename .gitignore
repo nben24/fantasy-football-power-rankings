@@ -17,3 +17,10 @@ reference/my_columns.md
 
 # Run logs from the scheduled job
 logs/
+
+# Built site output -- generated from data/, so it contains real team names
+site_out/
+site_preview/
+
+# Cloudflare deploy tool cache (account details)
+.wrangler/

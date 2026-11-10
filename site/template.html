@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+__HEAD__
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f4f2ec; --surface:#fcfcfb; --surface-2:#efede6; --line:#dedbd2;
+  --ink:#0b0b0b; --ink-2:#52514e; --ink-3:#7c7a74;
+  --accent:#2a78d6; --hot:#eb6834; --up:#2a78d6; --down:#e34948;
+  --grid:#e7e4dc; --ghost:#c9c6bd;
+  --display:"Anton","Impact","Arial Narrow Bold",sans-serif;
+  --body:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  color-scheme:dark; --bg:#121211; --surface:#1a1a19; --surface-2:#232321; --line:#33332f;
+  --ink:#f0efec; --ink-2:#c3c2b7; --ink-3:#8f8d85; --accent:#3987e5; --hot:#d95926; --up:#3987e5; --down:#e66767;
+  --grid:#2a2a27; --ghost:#4a4944;}}
+:root[data-theme="dark"]{
+  color-scheme:dark; --bg:#121211; --surface:#1a1a19; --surface-2:#232321; --line:#33332f;
+  --ink:#f0efec; --ink-2:#c3c2b7; --ink-3:#8f8d85; --accent:#3987e5; --hot:#d95926; --up:#3987e5; --down:#e66767;
+  --grid:#2a2a27; --ghost:#4a4944;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--body);-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.wrap{max-width:860px;margin:0 auto;padding-inline:16px;padding-block:0 64px}
+header.top{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+header.top .wrap{display:flex;align-items:center;gap:12px;padding-block:10px;flex-wrap:wrap}
+.brand{font-family:var(--display);font-size:22px;letter-spacing:.02em;text-decoration:none;text-transform:uppercase}
+.brand span{color:var(--hot)}
+.lname{margin-left:auto;font-weight:700;font-size:13px;text-decoration:none;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap}
+.chip.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+h1,h2,h3{margin:0}
+.kicker{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.display{font-family:var(--display);text-transform:uppercase;letter-spacing:.01em;line-height:1.02}
+.hero{padding-block:36px 20px}
+.hero h1{font-size:clamp(40px,9vw,76px)}
+.hero p{color:var(--ink-2);max-width:560px;margin:10px 0 0}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;text-decoration:none;display:flex;flex-direction:column;gap:10px;transition:transform .12s,border-color .12s}
+.card:hover{transform:translateY(-2px);border-color:var(--ink-3)}
+.card h2{font-size:28px}
+.card .theme{font-weight:700}
+.card .lead{color:var(--ink-2);font-size:14px}
+.card .num1{display:flex;gap:10px;align-items:baseline;border-top:1px solid var(--line);padding-top:10px;margin-top:auto}
+.card .num1 b{font-family:var(--display);font-size:26px;color:var(--hot)}
+.lhead{padding-block:28px 6px}
+.lhead h1{font-size:clamp(34px,7vw,56px)}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:14px 0 0;overflow-x:auto}
+.tabs a{padding:10px 14px;text-decoration:none;font-weight:600;color:var(--ink-3);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.tabs a.on{color:var(--ink);border-color:var(--hot)}
+.weekbar{display:flex;align-items:center;gap:8px;margin:18px 0 6px;flex-wrap:wrap}
+.weekbar a,.weekbar select{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 10px;font:600 14px var(--body);color:var(--ink);text-decoration:none}
+.weekbar a[aria-disabled="true"]{opacity:.35;pointer-events:none}
+.src{margin-left:auto;font-size:12px;color:var(--ink-3)}
+.theme-line{font-size:clamp(30px,6vw,46px);margin:18px 0 10px}
+.recap{color:var(--ink-2);font-size:16px;max-width:680px}
+.tier{margin-top:34px}
+.tier-h{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;border-bottom:3px solid var(--ink);padding-bottom:6px}
+.tier-h h3{font-family:var(--display);text-transform:uppercase;font-size:24px;font-weight:400}
+.tier-h span{color:var(--ink-3);font-style:italic}
+.row{display:grid;grid-template-columns:56px 1fr;gap:4px 14px;padding:16px 0;border-bottom:1px solid var(--line)}
+.rk{font-family:var(--display);font-size:42px;line-height:.9;text-align:right}
+.mv{display:block;font:700 12px var(--body);margin-top:6px;text-align:right}
+.mv.up{color:var(--up)} .mv.down{color:var(--down)} .mv.flat{color:var(--ink-3)}
+.tname{font-weight:700;font-size:17px;text-decoration:none}
+.tname:hover{text-decoration:underline}
+.meta{font-size:13px;color:var(--ink-3);margin-top:1px;font-variant-numeric:tabular-nums}
+.wu{margin:6px 0 0;font-size:16px}
+.awards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:14px}
+.award{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px}
+.award .t{font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--hot)}
+.award .w{font-weight:700;margin:4px 0}
+.award .r{font-size:14px;color:var(--ink-2)}
+.sec{margin-top:40px}
+.sec>h2{font-family:var(--display);text-transform:uppercase;font-weight:400;font-size:28px}
+.sec>p.sub{color:var(--ink-3);margin:2px 0 12px;font-size:14px}
+.board{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-top:12px}
+.game{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px;font-variant-numeric:tabular-nums}
+.game div{display:flex;justify-content:space-between;gap:8px}
+.game .w{font-weight:700} .game .l{color:var(--ink-3)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;position:relative}
+svg text{font-family:var(--body)}
+.records{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.rec{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px}
+.rec .k{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3)}
+.rec .v{font-family:var(--display);font-size:34px;line-height:1.1;margin-top:4px}
+.rec .d{font-size:14px;color:var(--ink-2)}
+table.t{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+table.t th,table.t td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right}
+table.t th:first-child,table.t td:first-child{text-align:left}
+table.t th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);font-weight:700}
+details.tv{margin-top:10px;font-size:14px} details.tv summary{cursor:pointer;color:var(--ink-3)}
+.scroll{overflow-x:auto}
+.tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--bg);font-size:13px;padding:7px 10px;border-radius:8px;z-index:20;max-width:240px;line-height:1.35;opacity:0;transition:opacity .08s}
+.trow{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:16px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.stat .k{font-size:12px;color:var(--ink-3);font-weight:600}
+.stat .v{font-family:var(--display);font-size:30px;line-height:1.1}
+.sheet{border-left:3px solid var(--line);padding:2px 0 2px 16px;margin:18px 0}
+.sheet .wk{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.sheet .wk a{text-decoration:none}
+.sheet p{margin:4px 0 0;font-size:16px}
+.trophy{display:inline-flex;gap:6px;align-items:center;background:var(--surface-2);border-radius:999px;padding:4px 10px;font-size:13px;font-weight:600;margin:4px 6px 0 0}
+.teamgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:16px}
+.teamgrid a{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px;text-decoration:none;display:flex;gap:12px;align-items:center}
+.teamgrid b{font-family:var(--display);font-size:26px;width:34px;text-align:right}
+.lb{display:grid;gap:4px}
+.lbr{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1.6fr) 44px;gap:10px;align-items:center;text-decoration:none;font-size:13px;padding:2px 0;border-radius:6px}
+.lbr:hover{background:var(--surface-2)}
+.lbn{text-align:right;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lbt{position:relative;height:16px;background:linear-gradient(var(--ink-3),var(--ink-3)) center/1px 100% no-repeat}
+.lbt i{position:absolute;top:2px;bottom:2px;border-radius:4px}
+.lbv{font-variant-numeric:tabular-nums;font-weight:600}
+.bumpbar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-bottom:10px;font-size:14px;font-weight:600}
+.bumpbar select{margin-left:6px;max-width:min(260px,70vw);border:1px solid var(--line);background:var(--surface-2);color:var(--ink);border-radius:8px;padding:6px 8px;font:600 14px var(--body)}
+.bumpinfo{color:var(--ink-3);font-weight:500;font-size:13px;text-decoration:none}
+.bumpinfo:hover{text-decoration:underline}
+.bumpsvg{width:100%;overflow:hidden}
+.bumpsvg svg{display:block}
+.foot{margin-top:56px;color:var(--ink-3);font-size:13px;text-align:center}
+@media (max-width:520px){.row{grid-template-columns:42px 1fr}.rk{font-size:32px}}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap"><a class="brand" href="__BASE__">The Power <span>Rankings</span></a><a class="lname" href="__BASE__">__LEAGUE_NAME__</a></div></header>
+<main class="wrap" id="app"></main>
+<div class="tip" id="tip"></div>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+const SITE = JSON.parse(document.getElementById('data').textContent);
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt = n => n == null ? '—' : (Math.round(n * 10) / 10).toString();
+const B = SITE.base;
+const U = {home: B, season: B + 'season/', teams: B + 'teams/', week: n => B + 'week-' + n + '/', team: s => B + 'teams/' + s + '/'};
+const slugOf = (lg, name) => (lg.teams.find(t => t.name === name) || {}).slug;
+const teamLink = (lg, name, label) => slugOf(lg, name) ? `<a class="tname" href="${U.team(slugOf(lg, name))}">${esc(label || name)}</a>` : `<span class="tname">${esc(label || name)}</span>`;
+
+/* ---------- tooltip ---------- */
+const tip = $('#tip');
+function showTip(e, html){ tip.innerHTML = html; tip.style.opacity = 1; moveTip(e); }
+function moveTip(e){ const x = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8); tip.style.left = x + 'px'; tip.style.top = (e.clientY + 14) + 'px'; }
+function hideTip(){ tip.style.opacity = 0; }
+let tipTimer;
+function bindTips(root){
+  // Touch fires enter and leave around a single tap, which made labels flash
+  // and vanish on phones. A tap keeps the label up until the next tap.
+  root.querySelectorAll('[data-tip]').forEach(el => {
+    el.addEventListener('pointerenter', e => { if (e.pointerType !== 'touch') showTip(e, el.dataset.tip); });
+    el.addEventListener('pointermove', e => { if (e.pointerType !== 'touch') moveTip(e); });
+    el.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch') hideTip(); });
+    el.addEventListener('pointerdown', e => {
+      if (e.pointerType !== 'touch') return;
+      e.stopPropagation(); showTip(e, el.dataset.tip);
+      clearTimeout(tipTimer); tipTimer = setTimeout(hideTip, 3000);
+    });
+  });
+}
+document.addEventListener('pointerdown', e => { if (e.pointerType === 'touch') hideTip(); });
+
+/* ---------- season math ---------- */
+function season(lg){
+  const names = lg.teams.map(t => t.name);
+  const s = Object.fromEntries(names.map(n => [n, {w:0, l:0, t:0, apW:0, apG:0, pf:0, scores:[], ranks:[]}]));
+  const games = [];
+  for (const wk of lg.weeks){
+    const scored = [];
+    for (const g of wk.games){
+      games.push({...g, week: wk.week});
+      scored.push([g.a, g.sa], [g.b, g.sb]);
+      const res = g.sa === g.sb ? ['t','t'] : g.sa > g.sb ? ['w','l'] : ['l','w'];
+      if (s[g.a]) { s[g.a][res[0]]++; s[g.a].pf += g.sa; s[g.a].scores.push({week:wk.week, pts:g.sa, opp:g.b, opts:g.sb}); }
+      if (s[g.b]) { s[g.b][res[1]]++; s[g.b].pf += g.sb; s[g.b].scores.push({week:wk.week, pts:g.sb, opp:g.a, opts:g.sa}); }
+    }
+    // all-play: how you'd do against every other team that week
+    for (const [n, p] of scored){
+      if (!s[n]) continue;
+      for (const [m, q] of scored){ if (m === n) continue; s[n].apG++; if (p > q) s[n].apW++; else if (p === q) s[n].apW += .5; }
+    }
+    for (const r of wk.rows) if (s[r.team]) s[r.team].ranks.push({week: wk.week, rank: r.rank});
+  }
+  for (const n of names){
+    const x = s[n], gp = x.w + x.l + x.t;
+    x.gp = gp; x.win = gp ? (x.w + x.t / 2) / gp : 0; x.ap = x.apG ? x.apW / x.apG : 0;
+    x.expW = x.ap * gp; x.luck = (x.w + x.t / 2) - x.expW;
+  }
+  return {s, games};
+}
+
+function records(lg, games){
+  const flat = games.flatMap(g => [
+    {team:g.a, pts:g.sa, opp:g.b, opts:g.sb, week:g.week, proj:g.pa},
+    {team:g.b, pts:g.sb, opp:g.a, opts:g.sa, week:g.week, proj:g.pb}]);
+  const by = (arr, f) => arr.reduce((a, b) => f(b) > f(a) ? b : a);
+  const hi = by(flat, x => x.pts), lo = by(flat, x => -x.pts);
+  const blow = by(flat, x => x.pts - x.opts);
+  const losses = flat.filter(x => x.pts < x.opts), wins = flat.filter(x => x.pts > x.opts);
+  const unluck = losses.length ? by(losses, x => x.pts) : null;
+  const steal = wins.length ? by(wins, x => -x.pts) : null;
+  const withProj = flat.filter(x => x.proj != null);
+  const miss = withProj.length ? by(withProj, x => x.proj - x.pts) : null;
+  const out = [
+    {k:'Highest score', v:fmt(hi.pts), team:hi.team, d:`week ${hi.week} vs ${hi.opp}`, fame:true},
+    {k:'Biggest blowout', v:'+' + fmt(blow.pts - blow.opts), team:blow.team, d:`over ${blow.opp}, week ${blow.week}`, fame:true},
+    {k:'Lowest score', v:fmt(lo.pts), team:lo.team, d:`week ${lo.week} vs ${lo.opp}`},
+  ];
+  if (unluck) out.push({k:'Best score in a loss', v:fmt(unluck.pts), team:unluck.team, d:`lost to ${unluck.opp} (${fmt(unluck.opts)}), week ${unluck.week}`});
+  if (steal) out.push({k:'Worst score in a win', v:fmt(steal.pts), team:steal.team, d:`beat ${steal.opp} (${fmt(steal.opts)}), week ${steal.week}`});
+  if (miss) out.push({k:'Worst miss of projection', v:'−' + fmt(miss.proj - miss.pts), team:miss.team, d:`projected ${fmt(miss.proj)}, scored ${fmt(miss.pts)}, week ${miss.week}`});
+  return out;
+}
+
+/* ---------- charts (hand-rolled SVG) ---------- */
+function bumpChart(lg, S, focus, W){
+  // Drawn at the width it is shown at. Scaled down from desktop size, a
+  // phone got 6px text and a right-hand column of names scrolled off screen.
+  const weeks = lg.weeks.map(w => w.week), n = lg.teams.length;
+  const narrow = W < 560;
+  const H = narrow ? 300 : 380, m = {l: 26, r: narrow ? 14 : 170, t: 14, b: 30};
+  const x = w => m.l + (weeks.length === 1 ? 0 : (w - weeks[0]) / (weeks[weeks.length-1] - weeks[0]) * (W - m.l - m.r));
+  const y = r => m.t + (r - 1) / Math.max(1, n - 1) * (H - m.t - m.b);
+  const step = narrow && weeks.length > 8 ? 2 : 1;
+  let g = '';
+  weeks.forEach((w, i) => {
+    g += `<line x1="${x(w)}" x2="${x(w)}" y1="${m.t}" y2="${H-m.b}" stroke="var(--grid)"/>`;
+    if (i % step === 0 || i === weeks.length - 1) g += `<text x="${x(w)}" y="${H-8}" text-anchor="middle" font-size="12" fill="var(--ink-3)">W${w}</text>`;
+  });
+  for (const r of [1, n]) g += `<text x="${m.l-8}" y="${y(r)+4}" text-anchor="end" font-size="12" fill="var(--ink-3)">${r}</text>`;
+  const draw = t => {
+    const pts = S.s[t.name].ranks, on = focus === t.name;
+    const d = pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.week)},${y(p.rank)}`).join('');
+    const last = pts[pts.length-1];
+    let out = `<path d="${d}" fill="none" stroke="${on ? 'var(--accent)' : 'var(--ghost)'}" stroke-width="${on ? 3 : 1.5}" stroke-linejoin="round" stroke-linecap="round"/>`;
+    if (on) out += pts.map(p => `<circle cx="${x(p.week)}" cy="${y(p.rank)}" r="4.5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>`).join('');
+    if (!narrow && last) out += `<text x="${x(last.week)+10}" y="${y(last.rank)+4}" font-size="12" fill="${on ? 'var(--ink)' : 'var(--ink-2)'}" font-weight="${on ? 700 : 400}">${esc(trunc(t.name, 22))}</text>`;
+    if (narrow && on && last) {
+      // On a phone only the followed team is named, beside its newest point.
+      const lx = x(last.week) - 8, ly = y(last.rank) + (last.rank === 1 ? 18 : -10);
+      out += `<text x="${lx}" y="${ly}" text-anchor="end" font-size="13" font-weight="700" fill="var(--ink)" paint-order="stroke" stroke="var(--surface)" stroke-width="4">${esc(trunc(t.name, 20))}</text>`;
+    }
+    out += pts.map(p => `<circle cx="${x(p.week)}" cy="${y(p.rank)}" r="${narrow ? 12 : 9}" fill="transparent" data-team="${esc(t.name)}" data-tip="<b>${esc(t.name)}</b><br>Week ${p.week}: #${p.rank}"/>`).join('');
+    return `<g>${out}</g>`;
+  };
+  const others = lg.teams.filter(t => t.name !== focus), mine = lg.teams.filter(t => t.name === focus);
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Power rank by week for every team">${g}${others.map(draw).join('')}${mine.map(draw).join('')}</svg>`;
+}
+function trunc(s, n){ const c = Array.from(s); return c.length > n ? c.slice(0, n - 1).join('').trim() + '…' : s; }
+
+function mountBump(el, lg, S){
+  const order = lg.weeks[lg.weeks.length-1].rows.map(r => r.team).filter(n => S.s[n]);
+  let focus = order[0];
+  el.innerHTML = `<div class="bumpbar"><label>Follow <select aria-label="Team to follow">${order.map((n, i) => `<option value="${esc(n)}">#${i + 1} ${esc(n)}</option>`).join('')}</select></label>
+    <a class="bumpinfo"></a></div><div class="bumpsvg"></div>`;
+  const sel = el.querySelector('select'), box = el.querySelector('.bumpsvg'), info = el.querySelector('.bumpinfo');
+  let lastW = 0;
+  const draw = force => {
+    const W = Math.floor(box.clientWidth);
+    if (!W || (!force && W === lastW)) return;
+    lastW = W;
+    box.innerHTML = bumpChart(lg, S, focus, W);
+    sel.value = focus;
+    const rk = S.s[focus].ranks.map(r => r.rank);
+    info.textContent = `best #${Math.min(...rk)} · worst #${Math.max(...rk)} · team page →`;
+    info.href = U.team(slugOf(lg, focus));
+    box.querySelectorAll('circle[data-team]').forEach(c => {
+      c.addEventListener('click', () => { if (c.dataset.team !== focus) { focus = c.dataset.team; draw(true); } });
+      c.addEventListener('pointerenter', e => {
+        if (e.pointerType === 'touch' || c.dataset.team === focus) return;
+        focus = c.dataset.team; draw(true);
+      });
+    });
+    bindTips(box);
+  };
+  sel.addEventListener('change', () => { focus = sel.value; draw(true); });
+  new ResizeObserver(() => draw(false)).observe(box);
+  draw(true);
+}
+
+function luckScatter(lg, S){
+  const W = 520, H = 400, m = {l:46, r:20, t:16, b:44};
+  const x = v => m.l + v * (W - m.l - m.r), y = v => H - m.b - v * (H - m.t - m.b);
+  let g = '';
+  for (const v of [0, .25, .5, .75, 1]){
+    g += `<line x1="${x(v)}" x2="${x(v)}" y1="${m.t}" y2="${H-m.b}" stroke="var(--grid)"/><line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/>`;
+    g += `<text x="${x(v)}" y="${H-m.b+16}" text-anchor="middle" font-size="11" fill="var(--ink-3)">${v*100}%</text><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink-3)">${v*100}%</text>`;
+  }
+  g += `<line x1="${x(0)}" y1="${y(0)}" x2="${x(1)}" y2="${y(1)}" stroke="var(--ink-3)" stroke-dasharray="4 4"/>`;
+  g += `<text x="${x(.04)}" y="${y(.94)}" font-size="12" font-weight="700" fill="var(--ink-3)">LUCKY ↖</text><text x="${x(.96)}" y="${y(.05)}" text-anchor="end" font-size="12" font-weight="700" fill="var(--ink-3)">↘ ROBBED</text>`;
+  g += `<text x="${(m.l + W - m.r)/2}" y="${H-6}" text-anchor="middle" font-size="12" fill="var(--ink-2)">How good: win % if you played everyone every week</text>`;
+  g += `<text transform="translate(12 ${(m.t + H - m.b)/2}) rotate(-90)" text-anchor="middle" font-size="12" fill="var(--ink-2)">Actual win %</text>`;
+  const ranked = lg.teams.map(t => ({n:t.name, ...S.s[t.name]})).sort((a, b) => Math.abs(b.luck) - Math.abs(a.luck));
+  const label = new Set(ranked.slice(0, 4).map(r => r.n)), placed = [];
+  for (const r of ranked){
+    const cx = x(r.ap), cy = y(r.win);
+    g += `<a href="${U.team(slugOf(lg, r.n))}"><circle cx="${cx}" cy="${cy}" r="6" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>
+      <circle cx="${cx}" cy="${cy}" r="13" fill="transparent" data-tip="<b>${esc(r.n)}</b><br>Record ${r.w}-${r.l}${r.t ? '-' + r.t : ''} · all-play ${Math.round(r.ap*100)}%<br>${r.luck >= 0 ? '+' : ''}${fmt(r.luck)} wins vs. expected"/></a>`;
+    if (label.has(r.n)){
+      const right = cx < W - 170;
+      let ly = cy + 4;
+      // nudge down past any label already sitting on this line
+      while (placed.some(p => Math.abs(p.y - ly) < 15 && Math.abs(p.x - cx) < 150)) ly += 15;
+      placed.push({x: cx, y: ly});
+      g += `<text x="${cx + (right ? 10 : -10)}" y="${ly}" text-anchor="${right ? 'start' : 'end'}" font-size="12" font-weight="600" fill="var(--ink)">${esc(trunc(r.n, 20))}</text>`;
+    }
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Actual win percentage against all-play win percentage">${g}</svg>`;
+}
+
+function luckBars(lg, S){
+  const rows = lg.teams.map(t => ({n:t.name, ...S.s[t.name]})).sort((a, b) => b.luck - a.luck);
+  const max = Math.max(1, ...rows.map(r => Math.abs(r.luck)));
+  return `<div class="lb">${rows.map(r => {
+    const pct = Math.abs(r.luck) / max * 50, pos = r.luck >= 0;
+    return `<a class="lbr" href="${U.team(slugOf(lg, r.n))}" data-tip="<b>${esc(r.n)}</b><br>${r.w} actual wins, ${fmt(r.expW)} expected">
+      <span class="lbn">${esc(r.n)}</span>
+      <span class="lbt"><i style="${pos ? 'left:50%' : `right:50%`};width:${pct}%;background:${pos ? 'var(--up)' : 'var(--down)'}"></i></span>
+      <span class="lbv">${pos ? '+' : '−'}${fmt(Math.abs(r.luck))}</span></a>`;
+  }).join('')}</div>`;
+}
+
+function teamCharts(lg, S, name){
+  const x0 = S.s[name], sc = x0.scores, rk = x0.ranks;
+  const W = 760, H = 220, m = {l:40, r:14, t:14, b:28};
+  const max = Math.max(...sc.map(s => Math.max(s.pts, s.opts))) * 1.08;
+  const bw = (W - m.l - m.r) / sc.length;
+  const y = v => H - m.b - v / max * (H - m.t - m.b);
+  let g = '';
+  for (const v of [0, 50, 100, 150, 200].filter(v => v < max)) g += `<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink-3)">${v}</text>`;
+  sc.forEach((s, i) => {
+    const cx = m.l + i * bw + bw / 2, w = Math.min(38, bw * .6), won = s.pts > s.opts;
+    g += `<rect x="${cx - w/2}" y="${y(s.pts)}" width="${w}" height="${y(0) - y(s.pts)}" rx="4" fill="${won ? 'var(--accent)' : 'var(--ghost)'}"/>`;
+    g += `<line x1="${cx - w/2 - 4}" x2="${cx + w/2 + 4}" y1="${y(s.opts)}" y2="${y(s.opts)}" stroke="var(--ink)" stroke-width="2"/>`;
+    g += `<text x="${cx}" y="${H-10}" text-anchor="middle" font-size="12" fill="var(--ink-3)">W${s.week} ${won ? 'W' : 'L'}</text>`;
+    g += `<rect x="${cx - bw/2}" y="${m.t}" width="${bw}" height="${H - m.t - m.b}" fill="transparent" data-tip="<b>Week ${s.week}: ${won ? 'won' : 'lost'}</b><br>${fmt(s.pts)} – ${fmt(s.opts)} vs ${esc(s.opp)}"/>`;
+  });
+  const n = lg.teams.length, H2 = 170, y2 = r => m.t + (r - 1) / (n - 1) * (H2 - m.t - m.b);
+  const x2 = i => m.l + (rk.length === 1 ? (W - m.l - m.r)/2 : i / (rk.length - 1) * (W - m.l - m.r));
+  let g2 = '';
+  for (const r of [1, Math.ceil(n/2), n]) g2 += `<line x1="${m.l}" x2="${W-m.r}" y1="${y2(r)}" y2="${y2(r)}" stroke="var(--grid)"/><text x="${m.l-8}" y="${y2(r)+4}" text-anchor="end" font-size="11" fill="var(--ink-3)">#${r}</text>`;
+  g2 += `<path d="${rk.map((p, i) => `${i ? 'L' : 'M'}${x2(i)},${y2(p.rank)}`).join('')}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>`;
+  rk.forEach((p, i) => {
+    g2 += `<circle cx="${x2(i)}" cy="${y2(p.rank)}" r="4.5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/><text x="${x2(i)}" y="${H2-10}" text-anchor="middle" font-size="12" fill="var(--ink-3)">W${p.week}</text>`;
+    g2 += `<circle cx="${x2(i)}" cy="${y2(p.rank)}" r="14" fill="transparent" data-tip="Week ${p.week}: #${p.rank}"/>`;
+  });
+  return {
+    scores: `<div class="scroll"><svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:480px" role="img" aria-label="Weekly score, with the opponent's score marked">${g}</svg></div>`,
+    ranks: `<div class="scroll"><svg viewBox="0 0 ${W} ${H2}" width="100%" style="min-width:480px" role="img" aria-label="Power rank by week">${g2}</svg></div>`,
+  };
+}
+
+/* ---------- views ---------- */
+function mv(r){
+  if (r.change == null || r.prev == null) return `<span class="mv flat">new</span>`;
+  if (r.change > 0) return `<span class="mv up">▲ ${r.change}</span>`;
+  if (r.change < 0) return `<span class="mv down">▼ ${-r.change}</span>`;
+  return `<span class="mv flat">—</span>`;
+}
+function metaLine(r){
+  const p = [r.record]; if (r.streak) p.push(r.streak);
+  if (r.pf != null && r.pa != null) p.push(`${Math.round(r.pf)} PF / ${Math.round(r.pa)} PA`);
+  return p.filter(Boolean).join(' · ');
+}
+function tabs(lg, on){
+  return `<div class="tabs">${[['week', 'This Week', U.home], ['season', 'Season', U.season], ['teams', 'Teams', U.teams]]
+    .map(([k, t, h]) => `<a class="${on === k ? 'on' : ''}" href="${h}">${t}</a>`).join('')}</div>`;
+}
+function lhead(lg){
+  const last = lg.weeks[lg.weeks.length-1].week;
+  return `<div class="lhead"><div class="kicker">${lg.season || ''} season · through week ${last}</div><h1 class="display">${esc(lg.name)}</h1></div>`;
+}
+
+function weekView(lg, n){
+  const i = lg.weeks.findIndex(w => w.week === n); const w = lg.weeks[i < 0 ? lg.weeks.length-1 : i];
+  const prev = lg.weeks[lg.weeks.indexOf(w) - 1], next = lg.weeks[lg.weeks.indexOf(w) + 1];
+  const byTeam = Object.fromEntries(w.rows.map(r => [r.team, r]));
+  const placed = new Set();
+  const row = r => `<div class="row"><div><div class="rk">${r.rank}</div>${mv(r)}</div><div>${teamLink(lg, r.team, r.label)}<div class="meta">${esc(metaLine(r))}</div><p class="wu">${esc(r.writeup)}</p></div></div>`;
+  const tierHtml = w.tiers.map(t => {
+    const rows = t.teams.map(n => byTeam[n]).filter(Boolean); rows.forEach(r => placed.add(r.team));
+    return `<section class="tier"><div class="tier-h"><h3>${esc(t.name)}</h3>${t.subtitle ? `<span>${esc(t.subtitle)}</span>` : ''}</div>${rows.map(row).join('')}</section>`;
+  }).join('');
+  const leftover = w.rows.filter(r => !placed.has(r.team));
+  return `${lhead(lg)}${tabs(lg, next ? '' : 'week')}
+    <div class="weekbar"><a href="${prev ? U.week(prev.week) : '#'}" aria-disabled="${!prev}" aria-label="Previous week">◀</a>
+      <select aria-label="Week" onchange="location.href=U.week(this.value)">${lg.weeks.map(x => `<option value="${x.week}" ${x === w ? 'selected' : ''}>Week ${x.week}</option>`).join('')}</select>
+      <a href="${next ? U.week(next.week) : '#'}" aria-disabled="${!next}" aria-label="Next week">▶</a></div>
+    <h2 class="display theme-line">${esc(w.theme)}</h2><p class="recap">${esc(w.recap)}</p>
+    ${tierHtml}${leftover.map(row).join('')}
+    <section class="sec"><h2>Awards</h2><div class="awards">${w.awards.map(a => `<div class="award"><div class="t">${esc(a.title)}</div><div class="w">${teamLink(lg, a.team)}</div><div class="r">${esc(a.reason)}</div></div>`).join('')}</div></section>
+    <section class="sec"><h2>Scoreboard</h2><div class="board">${w.games.map(g => {
+      const aw = g.sa > g.sb;
+      return `<div class="game"><div class="${aw ? 'w' : 'l'}"><span>${esc(g.a)}</span><span>${fmt(g.sa)}</span></div><div class="${aw ? 'l' : 'w'}"><span>${esc(g.b)}</span><span>${fmt(g.sb)}</span></div></div>`;
+    }).join('')}</div></section>`;
+}
+
+function seasonView(lg){
+  const S = season(lg), recs = records(lg, S.games);
+  const trophies = {};
+  for (const w of lg.weeks) for (const a of w.awards) if (a.team) (trophies[a.team] ||= []).push({...a, week: w.week});
+  const rows = lg.teams.map(t => ({n:t.name, ...S.s[t.name]})).sort((a, b) => b.luck - a.luck);
+  return `${lhead(lg)}${tabs(lg, 'season')}
+    <section class="sec"><h2>Lucky or good?</h2><p class="sub">Every team's real record against the record it would have if it played the whole league every week. Above the line, the schedule has been kind.</p>
+      <div class="panel">${luckScatter(lg, S)}</div></section>
+    <section class="sec"><h2>Wins above expected</h2><p class="sub">Actual wins minus all-play expected wins. Blue is borrowed time; red is a team owed an apology.</p>
+      <div class="panel">${luckBars(lg, S)}
+      <details class="tv"><summary>Show as a table</summary><div class="scroll"><table class="t"><tr><th>Team</th><th>Record</th><th>All-play</th><th>Expected W</th><th>Luck</th><th>Points</th></tr>
+      ${rows.map(r => `<tr><td>${esc(r.n)}</td><td>${r.w}-${r.l}${r.t ? '-' + r.t : ''}</td><td>${Math.round(r.ap*100)}%</td><td>${fmt(r.expW)}</td><td>${r.luck >= 0 ? '+' : ''}${fmt(r.luck)}</td><td>${Math.round(r.pf)}</td></tr>`).join('')}</table></div></details></div></section>
+    <section class="sec"><h2>The rank race</h2><p class="sub">Power rank every week. Pick a team, or tap a line, to follow it.</p><div class="panel" id="bump"></div></section>
+    <section class="sec"><h2>Records</h2><p class="sub">Season highs and lows so far.</p><div class="records">${recs.map(r => `<div class="rec"><div class="k">${r.fame ? '🏆' : '💀'} ${esc(r.k)}</div><div class="v">${esc(r.v)}</div><div class="d">${teamLink(lg, r.team)}<br>${esc(r.d)}</div></div>`).join('')}</div></section>
+    <section class="sec"><h2>Trophy case</h2><p class="sub">Every award handed out this season.</p>
+      <div class="scroll"><table class="t"><tr><th>Team</th><th style="text-align:left">Awards</th></tr>
+      ${Object.entries(trophies).sort((a, b) => b[1].length - a[1].length).map(([t, list]) => `<tr><td>${teamLink(lg, t)}</td><td style="text-align:left">${list.map(a => `<span class="trophy" title="${esc(a.reason)}">W${a.week} · ${esc(a.title)}</span>`).join('')}</td></tr>`).join('')}</table></div></section>`;
+}
+
+function teamsView(lg){
+  const w = lg.weeks[lg.weeks.length-1];
+  return `${lhead(lg)}${tabs(lg, 'teams')}<div class="teamgrid">${w.rows.map(r => `<a href="${U.team(slugOf(lg, r.team))}"><b>${r.rank}</b><div><div style="font-weight:700">${esc(r.label)}</div><div class="meta">${esc(metaLine(r))}</div></div></a>`).join('')}</div>`;
+}
+
+function teamView(lg, slug){
+  const t = lg.teams.find(x => x.slug === slug); if (!t) return teamsView(lg);
+  const S = season(lg), x = S.s[t.name], ch = teamCharts(lg, S, t.name);
+  const last = lg.weeks[lg.weeks.length-1].rows.find(r => r.team === t.name) || {};
+  const sheet = lg.weeks.slice().reverse().map(w => {
+    const r = w.rows.find(r => r.team === t.name); if (!r || !r.writeup) return '';
+    const tier = w.tiers.find(ti => ti.teams.includes(t.name));
+    return `<div class="sheet"><div class="wk"><a href="${U.week(w.week)}">Week ${w.week}</a> · #${r.rank}${tier ? ' · ' + esc(tier.name) : ''}</div><p>${esc(r.writeup)}</p></div>`;
+  }).join('');
+  const awards = lg.weeks.flatMap(w => w.awards.filter(a => a.team === t.name).map(a => ({...a, week: w.week})));
+  const best = Math.min(...x.ranks.map(r => r.rank)), worst = Math.max(...x.ranks.map(r => r.rank));
+  return `${lhead(lg)}${tabs(lg, 'teams')}
+    <div class="lhead" style="padding-top:20px"><div class="kicker">#${last.rank} this week</div><h1 class="display" style="font-size:clamp(30px,6vw,48px)">${esc(t.name)}</h1><div class="meta">${esc(metaLine(last))}</div></div>
+    <div class="trow">
+      <div class="stat"><div class="k">Record</div><div class="v">${x.w}-${x.l}${x.t ? '-' + x.t : ''}</div></div>
+      <div class="stat"><div class="k">All-play record</div><div class="v">${Math.round(x.ap*100)}%</div></div>
+      <div class="stat"><div class="k">Luck</div><div class="v">${x.luck >= 0 ? '+' : '−'}${fmt(Math.abs(x.luck))}</div></div>
+      <div class="stat"><div class="k">Best / worst rank</div><div class="v">#${best} / #${worst}</div></div>
+    </div>
+    <section class="sec"><h2>Every week</h2><p class="sub">Score each week; the tick across each bar is what the opponent put up. Blue bars are wins.</p><div class="panel">${ch.scores}</div></section>
+    <section class="sec"><h2>Rank</h2><div class="panel">${ch.ranks}</div></section>
+    ${awards.length ? `<section class="sec"><h2>Trophy case</h2>${awards.map(a => `<span class="trophy" title="${esc(a.reason)}">W${a.week} · ${esc(a.title)}</span>`).join('')}</section>` : ''}
+    <section class="sec"><h2>Rap sheet</h2><p class="sub">Everything the column has said about this team, newest first.</p>${sheet}</section>`;
+}
+
+(function render(){
+  const lg = SITE.league, r = SITE.route;
+  let html;
+  if (r.kind === 'season') html = seasonView(lg);
+  else if (r.kind === 'teams') html = teamsView(lg);
+  else if (r.kind === 'team') html = teamView(lg, r.slug);
+  else html = weekView(lg, r.week || lg.weeks[lg.weeks.length-1].week);
+  const app = $('#app');
+  app.innerHTML = html + `<div class="foot">Updated ${esc(SITE.updated)}</div>`;
+  bindTips(app); const b = app.querySelector('#bump'); if (b) mountBump(b, lg, season(lg));
+})();
+</script>
+</body>
+</html>

@@ -4,8 +4,15 @@ A local-first Streamlit app that turns a week of ESPN fantasy football into a pa
 rankings column with humorous commentary, for private leagues. League data comes straight from
 ESPN's API (scores, standings, projections and full lineups) or, as a fallback, from screenshots
 read by Claude's vision model. Either way the numbers are cross-checked arithmetically against the
-previous week before anything is trusted, and a transparent weighted model computes the rankings. A three-stage LLM pipeline then writes the commentary, grounded
-throughout in deterministically computed facts rather than the model's own recollection.
+previous week before anything is trusted, and a transparent weighted model computes the rankings.
+A three-stage LLM pipeline then writes the commentary, grounded throughout in deterministically
+computed facts rather than the model's own recollection.
+
+Each week can go out two ways: as plain text for the group chat, or published to a small website
+with one unlisted page per league. The site has the column for every week, season charts
+(lucky-or-good, wins above expected, the rank race), records, a trophy case, and a page per team
+with every line the column has written about it. A scheduled Tuesday-morning job pulls and writes
+every league unattended; nothing is published until you have read it.
 
 The interesting engineering problem here is not calling an LLM — it is constraining one. Most of
 the code exists to make the model's output verifiable, to compute facts rather than ask for them,
@@ -25,6 +32,7 @@ flowchart TB
     A --> W[Stage 2: writeup generation]
     W --> C[Stage 3: editorial critique]
     C --> X[Output<br/>plain-text column for group chat]
+    X --> WEB[Website<br/>one unlisted page per league,<br/>published after review]
 
     M[(JSON league memory<br/>weeks, storylines, aliases)]
     M -.context.-> P
@@ -291,6 +299,42 @@ The 10 and 11 o'clock entries are free retries in case ESPN hasn't finalised the
 the log paths outside `~/Documents`: launchd refuses to open them there and the job exits with
 code 78 before Python starts.
 
+## Website
+
+Each league can have its own page: the column for every week, a season view (lucky-or-good
+chart, wins above expected, the rank race, records, trophy case) and a page per team with its
+whole season's rap sheet. One site, one unlisted address per league
+(`/my-league-3f9a1c/`), and nothing links the leagues together, so each group chat only sees its
+own. Search engines are told to stay out. Manager names, league notes and storylines never leave
+your machine; the site shows team names only.
+
+**Only weeks you publish go out.** Each league remembers the last week you published, so a
+column the Tuesday run wrote but you haven't read can't reach the site, even when you publish a
+different league. Tuesday becomes: notification, review in the app, **🚀 Publish week N** in the
+sidebar, send the link (the league's address always shows its newest week). After regenerating
+anything, **🔄 Republish**. **👀 Preview first** builds every league locally, unreviewed week
+included, and opens it without uploading anything.
+
+Hosting is Cloudflare Pages, free. The built pages upload straight from your machine and never
+go through git, so real team names stay off this public repo. One-time setup:
+
+1. Create a free account at `dash.cloudflare.com`. Your **account ID** is on the right of the
+   account home page.
+2. My Profile → API Tokens → Create Token → *Create Custom Token*, with one permission:
+   **Account · Cloudflare Pages · Edit**.
+3. Add both to `.env` as `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and restart the app.
+4. Publish once. Cloudflare prints the site's address; if it isn't
+   `https://power-rankings.pages.dev` (the name can be taken), set `SITE_URL` in `.env` to what
+   it printed and republish, so link previews point at the right place.
+
+Requires Node.js (`npx`) for the upload. From the terminal:
+
+```bash
+python scripts/publish_site.py --preview             # build everything, serve at localhost:8765
+python scripts/publish_site.py --league my_league  # publish that league's latest week
+python scripts/publish_site.py                       # rebuild and redeploy what's published
+```
+
 ## Tests
 
 ```bash
@@ -299,7 +343,7 @@ pip install -r requirements-dev.txt
 python -m pytest tests/ -q
 ```
 
-**185 tests, running in roughly one second.** The suite uses hand-built fixtures exclusively — no
+**195 tests, running in a couple of seconds.** The suite uses hand-built fixtures exclusively — no
 screenshots, no API calls, no cost — and covers the ranking mathematics, team-name normalization
 and alias resolution, storyline lifecycle, occurrence detection, week-over-week reconciliation
 (including deliberately corrupted inputs to confirm the checks actually fail), output
@@ -318,9 +362,12 @@ src/
   narratives.py         Angle finding, writeup generation, editorial critique, profiling
   espn_sync.py          Direct ESPN pull, emitting the same shape as screenshot extraction
   weekly_run.py         Unattended per-league run, used by scripts/weekly_run.py
+  site_build.py         Builds the per-league website and uploads it to Cloudflare Pages
   prompts.py            Shared tone, style and factual-constraint text
   memory.py             JSON persistence: leagues, weeks, storylines, team-name aliases
 scripts/weekly_run.py   CLI entry point for the scheduled run
+scripts/publish_site.py Build, preview or publish the website
+site/template.html      The website's page template (no data in it)
 tests/                  Fixture-based tests, no network access
 reference/              Template for calibrating voice against your own past columns
 data/leagues/*.json     One file per league (gitignored — contains real names)

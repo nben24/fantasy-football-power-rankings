@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from src import data_extraction, data_validation, espn_sync, memory, narratives, rankings
+from src import data_extraction, data_validation, espn_sync, memory, narratives, rankings, site_build
 
 st.set_page_config(page_title="Fantasy Power Rankings", page_icon="🏈", layout="wide")
 
@@ -320,6 +320,45 @@ if active_league_id:
     league = memory.load_league(active_league_id)
     st.sidebar.divider()
     st.sidebar.caption(f"**{league['name']}** settings")
+
+    # ---- website: one unlisted page per league, updated only when you say so
+    with st.sidebar.container(border=True):
+        written_weeks = [int(k) for k, v in (league.get("weeks") or {}).items() if v.get("writeups")]
+        latest_written = max(written_weeks) if written_weeks else None
+        pub = league.get("site_published_week")
+        st.markdown("**🌐 Website**")
+        if pub:
+            st.caption(f"Live through week {pub} · [open the league's page]({site_build.league_url(league)})")
+        else:
+            st.caption("Not on the site yet. Publishing gives this league its own unlisted link.")
+        missing = site_build.missing_deploy_settings()
+        if latest_written is None:
+            st.caption("Write a week first.")
+        else:
+            label = (f"🚀 Publish week {latest_written}" if latest_written != pub
+                     else f"🔄 Republish week {pub}")
+            if st.button(label, key=_lk("publish_btn"), type="primary" if latest_written != pub else "secondary",
+                         width="stretch", disabled=bool(missing),
+                         help="Only publish after you've read it. Republish after regenerating anything."):
+                with st.spinner("Building and uploading..."):
+                    try:
+                        site_build.publish(league)
+                        st.toast(f"Week {league['site_published_week']} is live.")
+                        st.rerun()
+                    except Exception as e:  # noqa: BLE001
+                        st.error(f"Publish failed: {e}")
+            if st.button("👀 Preview first", key=_lk("preview_btn"), width="stretch",
+                         help="Builds the site with every written week and opens it locally. Nothing is uploaded."):
+                with st.spinner("Building preview..."):
+                    base = site_build.serve_preview()
+                    # The build assigns and saves the address; read it back
+                    # rather than minting a second one here.
+                    url = f"{base}/{memory.load_league(active_league_id)['site_slug']}/"
+                import webbrowser
+                webbrowser.open(url)
+                st.caption(f"Preview: [{url}]({url})")
+        if missing:
+            st.caption("To publish, add to .env: " + ", ".join(missing) + ". See README → Website.")
 
     with st.sidebar.expander("📝 League notes"):
         st.caption("Managers, rivalries, running jokes. Used for flavor, never stated as fact unless true.")

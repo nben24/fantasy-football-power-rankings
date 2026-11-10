@@ -125,3 +125,15 @@ a target for event specificity the app cannot reach without user input.
 This repo is **public**. `data/` (real manager names) and `reference/my_columns.md` are
 gitignored and must stay that way. Before committing, check `git status` after any broad `git add`
 and never add example output containing real league or manager names to tracked files.
+
+The website follows the same line. `site_out/` and `site_preview/` are built from `data/` and are
+gitignored; deploys upload them straight to Cloudflare, never through git. `site_build.league_data`
+is the only thing that decides what reaches the site: team names, writeups, scores and awards,
+never managers, league notes or storylines. Keep it an allowlist. Two more rules:
+
+- **Only published weeks go out.** `site_published_week` per league gates the build, so the
+  unattended Tuesday run can never put an unreviewed column online. Don't auto-publish from
+  `weekly_run`.
+- **Leagues never link to each other.** Each one is its own unlisted address (`site_slug`, random
+  suffix, stable forever) and the bare domain lists nothing. Different friend groups must not
+  find each other's roasts.
