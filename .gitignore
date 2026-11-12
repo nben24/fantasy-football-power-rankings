@@ -24,3 +24,4 @@ site_preview/
 
 # Cloudflare deploy tool cache (account details)
 .wrangler/
+site_demo/

@@ -296,20 +296,34 @@ function luckScatter(lg, S){
   g += `<text x="${(m.l + W - m.r)/2}" y="${H-6}" text-anchor="middle" font-size="12" fill="var(--ink-2)">How good: win % if you played everyone every week</text>`;
   g += `<text transform="translate(12 ${(m.t + H - m.b)/2}) rotate(-90)" text-anchor="middle" font-size="12" fill="var(--ink-2)">Actual win %</text>`;
   const ranked = lg.teams.map(t => ({n:t.name, ...S.s[t.name]})).sort((a, b) => Math.abs(b.luck) - Math.abs(a.luck));
-  const label = new Set(ranked.slice(0, 4).map(r => r.n)), placed = [];
+  const label = new Set(ranked.slice(0, 4).map(r => r.n));
+  const dots = ranked.map(r => ({n: r.n, x: x(r.ap), y: y(r.win)}));
+  let labels = '';
+  const placed = [];
+  // Try each side of the dot and keep the first spot that clears every other
+  // dot, every label already placed and the plot edge. Nudging only downward
+  // put "Taco Tuesday FC" straight through a neighbouring team's dot.
+  const spots = [[10, 4, 'start'], [-10, 4, 'end'], [10, -10, 'start'], [-10, -10, 'end'],
+                 [10, 18, 'start'], [-10, 18, 'end'], [0, -14, 'middle'], [0, 24, 'middle']];
+  const clash = (b, self) =>
+    b.x0 < m.l || b.x1 > W - m.r || b.y0 < m.t || b.y1 > H - m.b ||
+    dots.some(d => d.n !== self && d.x + 8 > b.x0 && d.x - 8 < b.x1 && d.y + 8 > b.y0 && d.y - 8 < b.y1) ||
+    placed.some(p => p.x0 < b.x1 && p.x1 > b.x0 && p.y0 < b.y1 && p.y1 > b.y0);
   for (const r of ranked){
     const cx = x(r.ap), cy = y(r.win);
     g += `<a href="${U.team(slugOf(lg, r.n))}"><circle cx="${cx}" cy="${cy}" r="6" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>
       <circle cx="${cx}" cy="${cy}" r="13" fill="transparent" data-tip="<b>${esc(r.n)}</b><br>Record ${r.w}-${r.l}${r.t ? '-' + r.t : ''} · all-play ${Math.round(r.ap*100)}%<br>${r.luck >= 0 ? '+' : ''}${fmt(r.luck)} wins vs. expected"/></a>`;
-    if (label.has(r.n)){
-      const right = cx < W - 170;
-      let ly = cy + 4;
-      // nudge down past any label already sitting on this line
-      while (placed.some(p => Math.abs(p.y - ly) < 15 && Math.abs(p.x - cx) < 150)) ly += 15;
-      placed.push({x: cx, y: ly});
-      g += `<text x="${cx + (right ? 10 : -10)}" y="${ly}" text-anchor="${right ? 'start' : 'end'}" font-size="12" font-weight="600" fill="var(--ink)">${esc(trunc(r.n, 20))}</text>`;
-    }
+    if (!label.has(r.n)) continue;
+    const text = trunc(r.n, 20), w = Array.from(text).length * 7;
+    const box = ([dx, dy, a]) => {
+      const lx = cx + dx, x0 = a === 'start' ? lx : a === 'end' ? lx - w : lx - w / 2;
+      return {lx, ly: cy + dy, a, x0, x1: x0 + w, y0: cy + dy - 11, y1: cy + dy + 3};
+    };
+    const b = spots.map(box).find(b => !clash(b, r.n)) || box(spots[cx < W - 170 ? 0 : 1]);
+    placed.push(b);
+    labels += `<text x="${b.lx}" y="${b.ly}" text-anchor="${b.a}" font-size="12" font-weight="600" fill="var(--ink)" stroke="var(--surface)" stroke-width="3" paint-order="stroke" style="pointer-events:none">${esc(text)}</text>`;
   }
+  g += labels;
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Actual win percentage against all-play win percentage">${g}</svg>`;
 }
 

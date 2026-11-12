@@ -18,6 +18,24 @@ The interesting engineering problem here is not calling an LLM — it is constra
 the code exists to make the model's output verifiable, to compute facts rather than ask for them,
 and to enforce in code the rules the model proved unable to follow from instructions alone.
 
+## What it looks like
+
+The published site for a made-up league. Every team, score and writeup in these screenshots is
+fictional; `scripts/demo_site.py` builds them with the real site code.
+
+**This week's column:** tiers, rank movement, record, streak and points above each writeup.
+
+<img src="docs/screenshots/week.png" alt="Week 8 column for a fictional league" width="720">
+
+<table>
+<tr>
+<td width="50%"><b>Season:</b> lucky or good, wins above expected, the rank race<br><br>
+<img src="docs/screenshots/season.png" alt="Season charts"></td>
+<td width="50%"><b>Team page:</b> weekly scores, rank history, everything the column has said<br><br>
+<img src="docs/screenshots/team.png" alt="Team history page"></td>
+</tr>
+</table>
+
 ## Architecture
 
 ```mermaid
@@ -367,6 +385,8 @@ src/
   memory.py             JSON persistence: leagues, weeks, storylines, team-name aliases
 scripts/weekly_run.py   CLI entry point for the scheduled run
 scripts/publish_site.py Build, preview or publish the website
+scripts/demo_site.py    Build the site from a fictional league for the README screenshots
+docs/screenshots/       Those screenshots (fictional data only)
 site/template.html      The website's page template (no data in it)
 tests/                  Fixture-based tests, no network access
 reference/              Template for calibrating voice against your own past columns
